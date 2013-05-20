@@ -192,7 +192,10 @@ public abstract class DependencyModel implements TrackerCustomizer {
         m_optional = optional;
         m_filter = filter;
         m_comparator = comparator;
-        m_context = new InterceptableIPOJOContext(this, context);
+        if (context != null) {
+            m_context = new InterceptableIPOJOContext(this, context);
+            // If the context is null, it gonna be set later using the setBundleContext method.
+        }
         m_policy = policy;
         // If the dynamic priority policy is chosen, and we have no comparator, fix it to OSGi standard service reference comparator.
         if (m_policy == DYNAMIC_PRIORITY_BINDING_POLICY && m_comparator == null) {
