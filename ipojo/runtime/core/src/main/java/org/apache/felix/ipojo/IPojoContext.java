@@ -65,7 +65,12 @@ public class IPojoContext implements BundleContext, ServiceContext {
      * @param context the bundle context
      */
     public IPojoContext(BundleContext context) {
-        m_bundleContext = context;
+        if (context instanceof IPojoContext) {
+            m_bundleContext = ((IPojoContext) context).getGlobalContext();
+            m_serviceContext = ((IPojoContext) context).getServiceContext();
+        } else {
+            m_bundleContext = context;
+        }
     }
 
     /**

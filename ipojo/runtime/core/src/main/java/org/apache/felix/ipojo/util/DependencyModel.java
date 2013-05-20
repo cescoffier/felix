@@ -31,6 +31,7 @@ import org.apache.felix.ipojo.ComponentInstance;
 import org.apache.felix.ipojo.ConfigurationException;
 import org.apache.felix.ipojo.IPOJOServiceFactory;
 import org.apache.felix.ipojo.context.ServiceReferenceImpl;
+import org.apache.felix.ipojo.dependency.impl.InterceptableIPOJOContext;
 import org.apache.felix.ipojo.metadata.Element;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Filter;
@@ -191,7 +192,7 @@ public abstract class DependencyModel implements TrackerCustomizer {
         m_optional = optional;
         m_filter = filter;
         m_comparator = comparator;
-        m_context = context;
+        m_context = new InterceptableIPOJOContext(this, context);
         m_policy = policy;
         // If the dynamic priority policy is chosen, and we have no comparator, fix it to OSGi standard service reference comparator.
         if (m_policy == DYNAMIC_PRIORITY_BINDING_POLICY && m_comparator == null) {
@@ -922,7 +923,7 @@ public abstract class DependencyModel implements TrackerCustomizer {
      */
     public void setBundleContext(BundleContext context) {
         if (m_tracker == null) { // Not started ...
-            m_context = context;
+            m_context = new InterceptableIPOJOContext(this, context);
         } else {
             throw new UnsupportedOperationException("Dynamic bundle (i.e. service) context change is not supported");
         }
@@ -1047,5 +1048,13 @@ public abstract class DependencyModel implements TrackerCustomizer {
 
     public ContextSourceManager getContextSourceManager() {
         return m_contextSourceManager;
+    }
+
+    /**
+     * Gets the dependency id.
+     * @return the dependency id. Specification name by default.
+     */
+    public String getId() {
+        return getSpecification().getName();
     }
 }
