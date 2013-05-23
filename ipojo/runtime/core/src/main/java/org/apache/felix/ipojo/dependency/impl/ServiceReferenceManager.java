@@ -189,7 +189,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private void fireUpdate(List<ServiceReference> selectedServices, List<ServiceReference> departures,
                             List<ServiceReference> arrivals, ServiceReference oldFirst,
                             ServiceReference firstService, Object service, ServiceReference modified) {
-        Changes set = new Changes(selectedServices, departures, arrivals, oldFirst, firstService, service, modified);
+        ChangeSet set = new ChangeSet(selectedServices, departures, arrivals, oldFirst, firstService, service, modified);
         m_dependency.onChange(set);
     }
 
@@ -284,11 +284,11 @@ public class ServiceReferenceManager implements TrackerCustomizer {
      * @param filter  the new filter
      * @param tracker the tracker
      */
-    public synchronized Changes setFilter(Filter filter, Tracker tracker) {
+    public synchronized ChangeSet setFilter(Filter filter, Tracker tracker) {
         if (tracker == null) {
             // Tracker closed, no problem
             m_filter = filter;
-            return new Changes(Collections.<ServiceReference>emptyList(),
+            return new ChangeSet(Collections.<ServiceReference>emptyList(),
                     Collections.<ServiceReference>emptyList(),
                     Collections.<ServiceReference>emptyList(),
                     null,
@@ -315,7 +315,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             List<ServiceReference> references = m_interceptor.getServiceReferences(m_dependency, getAllServices());
             RankingResult result = computeDifferences(beforeRanking, references);
             m_selectedReferences = result.selected;
-            return new Changes(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
+            return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
                     null, null);
         }
     }
@@ -332,7 +332,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         return m_filter;
     }
 
-    public Changes setComparator(Comparator<ServiceReference> cmp) {
+    public ChangeSet setComparator(Comparator<ServiceReference> cmp) {
         m_comparator = cmp;
         ServiceReference oldBest = getFirstService();
         List<ServiceReference> beforeRanking = getSelectedServices();
@@ -340,7 +340,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         List<ServiceReference> references = m_interceptor.getServiceReferences(m_dependency, getAllServices());
         RankingResult result = computeDifferences(beforeRanking, references);
         m_selectedReferences = result.selected;
-        return new Changes(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
+        return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
                 null, null);
     }
 
@@ -357,7 +357,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         }
     }
 
-    public class Changes {
+    public class ChangeSet {
         public final List<ServiceReference> selected;
         public final List<ServiceReference> departures;
         public final List<ServiceReference> arrivals;
@@ -366,10 +366,10 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         public final Object service;
         public final ServiceReference modified;
 
-        public Changes(List<ServiceReference> selectedServices,
-                       List<ServiceReference> departures, List<ServiceReference> arrivals,
-                       ServiceReference oldFirst, ServiceReference newFirst,
-                       Object service, ServiceReference modified) {
+        public ChangeSet(List<ServiceReference> selectedServices,
+                         List<ServiceReference> departures, List<ServiceReference> arrivals,
+                         ServiceReference oldFirst, ServiceReference newFirst,
+                         Object service, ServiceReference modified) {
             selected = selectedServices;
             this.departures = departures;
             this.arrivals = arrivals;
