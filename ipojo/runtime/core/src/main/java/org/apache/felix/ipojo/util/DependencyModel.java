@@ -363,14 +363,15 @@ public abstract class DependencyModel {
      * This methods invokes the {@link DependencyStateListener}.
      */
     private void computeDependencyState() {
+        // The dependency is broken, nothing else can be done
         if (m_state == BROKEN) {
             return;
-        } // The dependency is broken ...
+        }
 
         boolean mustCallValidate = false;
         boolean mustCallInvalidate = false;
         synchronized (this) {
-            if (m_optional || !m_serviceReferenceManager.isEmpty()) {
+            if (m_optional || ! m_serviceReferenceManager.isEmpty()) {
                 // The dependency is valid
                 if (m_state == UNRESOLVED) {
                     m_state = RESOLVED;
@@ -827,7 +828,7 @@ public abstract class DependencyModel {
         return getSpecification().getName();
     }
 
-    public synchronized void onChange(ServiceReferenceManager.ChangeSet set) {
+    public void onChange(ServiceReferenceManager.ChangeSet set) {
         // The selected service have changed.
         //TODO Synchro
 
@@ -918,14 +919,17 @@ public abstract class DependencyModel {
             }
         }
 
-        //TODO Did we already handle the dynamic priority case when a reference is modified. I think so.
+        // Did our state changed ?
+        computeDependencyState();
+
         // Do we have a modified service ?
         if (set.modified != null && m_boundServices.contains(set.modified)) {
             onServiceModification(set.modified);
         }
 
-        // Did our state changed ?
-        computeDependencyState();
+    }
 
+    public ServiceReferenceManager getServiceReferenceManager() {
+        return m_serviceReferenceManager;
     }
 }
