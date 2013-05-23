@@ -165,8 +165,10 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
 
-            // We add the reference to the matching list.
-            m_matchingReferences.add(reference);
+            // We add the reference to the matching list if not there yet.
+            if (! m_matchingReferences.contains(reference)) {
+                m_matchingReferences.add(reference);
+            }
 
             // We apply our ranking strategy.
             result = applyRankingOnModification(reference);
