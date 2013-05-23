@@ -49,4 +49,6 @@ public interface ServiceRankingInterceptor {
 
     public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> all,
                                               ServiceReference<?> reference);
+
+    public void close(DependencyModel dependency);
 }

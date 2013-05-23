@@ -296,7 +296,7 @@ public abstract class DependencyModel {
             m_tracker = null;
         }
         m_boundServices.clear();
-        m_serviceReferenceManager.reset();
+        m_serviceReferenceManager.close();
         ungetAllServices();
         m_state = UNRESOLVED;
         if (m_contextSourceManager != null) {

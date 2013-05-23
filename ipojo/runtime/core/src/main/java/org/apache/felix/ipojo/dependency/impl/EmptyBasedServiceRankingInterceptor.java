@@ -33,11 +33,7 @@ import java.util.List;
  */
 public class EmptyBasedServiceRankingInterceptor implements ServiceRankingInterceptor {
 
-    private DependencyModel m_dependency;
-
-    public void open(DependencyModel dependency) {
-        m_dependency = dependency;
-    }
+    public void open(DependencyModel dependency) { }
 
     public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> all) {
         return all;
@@ -55,4 +51,6 @@ public class EmptyBasedServiceRankingInterceptor implements ServiceRankingInterc
     public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> all, ServiceReference<?> reference) {
         return getServiceReferences(dependency, all);
     }
+
+    public void close(DependencyModel dependency) {  }
 }

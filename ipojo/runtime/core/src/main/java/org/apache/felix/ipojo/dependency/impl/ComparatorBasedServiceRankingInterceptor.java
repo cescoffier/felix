@@ -34,16 +34,13 @@ import java.util.List;
 public class ComparatorBasedServiceRankingInterceptor implements ServiceRankingInterceptor {
 
     private final Comparator<ServiceReference> m_comparator;
-    private DependencyModel m_dependency;
 
     public ComparatorBasedServiceRankingInterceptor(Comparator<ServiceReference> cmp) {
         this.m_comparator = cmp;
     }
 
 
-    public void open(DependencyModel dependency) {
-        m_dependency = dependency;
-    }
+    public void open(DependencyModel dependency) {    }
 
     public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> all) {
         List<ServiceReference> copy = new ArrayList<ServiceReference>(all);
@@ -63,4 +60,6 @@ public class ComparatorBasedServiceRankingInterceptor implements ServiceRankingI
     public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> all, ServiceReference<?> reference) {
         return getServiceReferences(dependency, all);
     }
+
+    public void close(DependencyModel dependency) {  }
 }

@@ -287,9 +287,9 @@ public class ServiceReferenceManager implements TrackerCustomizer {
      * @param tracker the tracker
      */
     public synchronized ChangeSet setFilter(Filter filter, Tracker tracker) {
+        m_filter = filter;
         if (tracker == null) {
             // Tracker closed, no problem
-            m_filter = filter;
             return new ChangeSet(Collections.<ServiceReference>emptyList(),
                     Collections.<ServiceReference>emptyList(),
                     Collections.<ServiceReference>emptyList(),
@@ -344,6 +344,11 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         m_selectedReferences = result.selected;
         return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
                 null, null);
+    }
+
+    public void close() {
+        m_interceptor.close(m_dependency);
+        reset();
     }
 
     private class RankingResult {
