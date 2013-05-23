@@ -580,15 +580,15 @@ public abstract class DependencyModel {
      * @param filter the new LDAP filter.
      */
     public void setFilter(Filter filter) {
-        ServiceReferenceManager.Changes changes;
+        ServiceReferenceManager.ChangeSet changeSet;
         synchronized (this) {
-            changes = m_serviceReferenceManager.setFilter(filter, m_tracker);
+            changeSet = m_serviceReferenceManager.setFilter(filter, m_tracker);
         }
 
-        applyReconfiguration(changes);
+        applyReconfiguration(changeSet);
     }
 
-    public void applyReconfiguration(ServiceReferenceManager.Changes changes) {
+    public void applyReconfiguration(ServiceReferenceManager.ChangeSet changeSet) {
         List<ServiceReference> arr = new ArrayList<ServiceReference>();
         List<ServiceReference> dep = new ArrayList<ServiceReference>();
 
@@ -600,17 +600,17 @@ public abstract class DependencyModel {
                 // Update bindings
                 m_boundServices.clear();
                 if (m_aggregate) {
-                    m_boundServices = new ArrayList<ServiceReference>(changes.selected);
-                    arr = changes.arrivals;
-                    dep = changes.departures;
+                    m_boundServices = new ArrayList<ServiceReference>(changeSet.selected);
+                    arr = changeSet.arrivals;
+                    dep = changeSet.departures;
                 } else {
                     ServiceReference used = null;
                     if (!m_boundServices.isEmpty()) {
                         used = m_boundServices.get(0);
                     }
 
-                    if (!changes.selected.isEmpty()) {
-                        final ServiceReference best = changes.newFirstReference;
+                    if (!changeSet.selected.isEmpty()) {
+                        final ServiceReference best = changeSet.newFirstReference;
                         // We didn't a provider
                         if (used == null) {
                             // We are not bound with anyone yet, so take the first of the selected set
@@ -618,7 +618,7 @@ public abstract class DependencyModel {
                             arr.add(best);
                         } else {
                             // A provider was already bound, did we changed ?
-                            if (changes.selected.contains(used)) {
+                            if (changeSet.selected.contains(used)) {
                                 // We are still valid - but in dynamic priority, we may have to change
                                 if (getBindingPolicy() == DYNAMIC_PRIORITY_BINDING_POLICY && used != best) {
                                     m_boundServices.add(best);
@@ -726,7 +726,6 @@ public abstract class DependencyModel {
      */
     public void setBindingPolicy() {
         throw new UnsupportedOperationException("Binding Policy change is not yet supported");
-        // TODO supporting dynamic policy change.
     }
 
     /**
@@ -745,12 +744,12 @@ public abstract class DependencyModel {
     }
 
     public void setComparator(Comparator<ServiceReference> cmp) {
-        ServiceReferenceManager.Changes changes;
+        ServiceReferenceManager.ChangeSet changeSet;
         synchronized (this) {
-            changes = m_serviceReferenceManager.setComparator(cmp);
+            changeSet = m_serviceReferenceManager.setComparator(cmp);
         }
 
-        applyReconfiguration(changes);
+        applyReconfiguration(changeSet);
     }
 
     /**
@@ -787,6 +786,7 @@ public abstract class DependencyModel {
      */
     public Object getService(ServiceReference ref, boolean store) {
         Object svc = m_tracker.getService(ref);
+
         if (svc instanceof IPOJOServiceFactory) {
             Object obj = ((IPOJOServiceFactory) svc).getService(m_instance);
             if (store) {
@@ -827,7 +827,7 @@ public abstract class DependencyModel {
         return getSpecification().getName();
     }
 
-    public void onChange(ServiceReferenceManager.Changes set) {
+    public synchronized void onChange(ServiceReferenceManager.ChangeSet set) {
         // The selected service have changed.
         //TODO Synchro
 
@@ -855,7 +855,7 @@ public abstract class DependencyModel {
         }
 
         // Manage departures
-        // We unbind all bound service that are leaving.
+        // We unbind all bound services that are leaving.
         for (ServiceReference ref : set.departures) {
             if (m_boundServices.contains(ref)) {
                 // We were using the reference
@@ -868,12 +868,21 @@ public abstract class DependencyModel {
         // For aggregate dependencies, call onServiceArrival for all services not-yet-bound and in the order of the
         // selection.
         if (isAggregate()) {
-            for (ServiceReference ref : set.selected) {
+            // If the dependency is not already in used,
+            // the bindings must be sorted as in set.selected
+            if (m_serviceObjects.isEmpty()  || DYNAMIC_PRIORITY_BINDING_POLICY == getBindingPolicy()) {
+                m_boundServices.clear();
+                m_boundServices.addAll(set.selected);
+            }
+
+            // Now we notify from the arrival.
+            // If we didn't add the reference yet, we add it.
+            for (ServiceReference ref : set.arrivals) {
                 // We bind all not-already bound services, so it's an arrival
                 if (!m_boundServices.contains(ref)) {
                     m_boundServices.add(ref);
-                    onServiceArrival(ref);
                 }
+                onServiceArrival(ref);
             }
         } else {
             if (!set.selected.isEmpty()) {
@@ -892,7 +901,17 @@ public abstract class DependencyModel {
                             m_boundServices.remove(current);
                             m_boundServices.add(best);
                             onServiceDeparture(current);
-                            onServiceDeparture(best);
+                            onServiceArrival(best);
+                        }
+                    } else {
+                        // In static and dynamic binding policy, if the service is not yet used and the new best is not
+                        // the currently selected one, we should switch.
+                        boolean isUsed = m_serviceObjects.containsKey(current);
+                        if (! isUsed  && current != best) {
+                            m_boundServices.remove(current);
+                            m_boundServices.add(best);
+                            onServiceDeparture(current);
+                            onServiceArrival(best);
                         }
                     }
                 }
