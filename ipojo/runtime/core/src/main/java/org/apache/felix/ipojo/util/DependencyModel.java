@@ -19,17 +19,16 @@
 package org.apache.felix.ipojo.util;
 
 import org.apache.felix.ipojo.ComponentInstance;
-import org.apache.felix.ipojo.ConfigurationException;
 import org.apache.felix.ipojo.IPOJOServiceFactory;
 import org.apache.felix.ipojo.dependency.impl.InterceptableIPOJOContext;
 import org.apache.felix.ipojo.dependency.impl.ServiceReferenceManager;
-import org.apache.felix.ipojo.metadata.Element;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Filter;
 import org.osgi.framework.InvalidSyntaxException;
 import org.osgi.framework.ServiceReference;
 
 import java.util.*;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Abstract dependency model.
@@ -135,6 +134,11 @@ public abstract class DependencyModel {
      * The current list of bound services.
      */
     private List<ServiceReference> m_boundServices = new ArrayList<ServiceReference>();
+    /**
+     * The lock ensuring state consistency of the dependency.
+     * This lock can be acquired from all collaborators.
+     */
+    private ReentrantReadWriteLock m_lock = new ReentrantReadWriteLock();
 
     /**
      * Creates a DependencyModel.
@@ -186,92 +190,17 @@ public abstract class DependencyModel {
         }
 
 
-
         m_state = UNRESOLVED;
         m_listener = listener;
     }
 
     /**
-     * Helper method parsing the comparator attribute and returning the
-     * comparator object. If the 'comparator' attribute is not set, this method
-     * returns null. If the 'comparator' attribute is set to 'osgi', this method
-     * returns the normal OSGi comparator. In other case, it tries to create
-     * an instance of the declared comparator class.
-     *
-     * @param dep     the Element describing the dependency
-     * @param context the bundle context (to load the comparator class)
-     * @return the comparator object, <code>null</code> if not set.
-     * @throws ConfigurationException the comparator class cannot be load or the
-     *                                comparator cannot be instantiated correctly.
-     */
-    public static Comparator getComparator(Element dep, BundleContext context) throws ConfigurationException {
-        Comparator cmp = null;
-        String comp = dep.getAttribute("comparator");
-        if (comp != null) {
-            if (comp.equalsIgnoreCase("osgi")) {
-                cmp = new ServiceReferenceRankingComparator();
-            } else {
-                try {
-                    Class cla = context.getBundle().loadClass(comp);
-                    cmp = (Comparator) cla.newInstance();
-                } catch (ClassNotFoundException e) {
-                    throw new ConfigurationException("Cannot load a customized comparator", e);
-                } catch (IllegalAccessException e) {
-                    throw new ConfigurationException("Cannot create a customized comparator", e);
-                } catch (InstantiationException e) {
-                    throw new ConfigurationException("Cannot create a customized comparator", e);
-                }
-            }
-        }
-        return cmp;
-    }
-
-    /**
-     * Loads the given specification class.
-     *
-     * @param specification the specification class name to load
-     * @param context       the bundle context
-     * @return the class object for the given specification
-     * @throws ConfigurationException if the class cannot be loaded correctly.
-     */
-    public static Class loadSpecification(String specification, BundleContext context) throws ConfigurationException {
-        Class spec;
-        try {
-            spec = context.getBundle().loadClass(specification);
-        } catch (ClassNotFoundException e) {
-            throw new ConfigurationException("A required specification cannot be loaded : " + specification, e);
-        }
-        return spec;
-    }
-
-    /**
-     * Helper method parsing the binding policy.
-     * If the 'policy' attribute is not set in the dependency, the method returns
-     * the 'DYNAMIC BINDING POLICY'. Accepted policy values are : dynamic,
-     * dynamic-priority and static.
-     *
-     * @param dep the Element describing the dependency
-     * @return the policy attached to this dependency
-     * @throws ConfigurationException if an unknown binding policy was described.
-     */
-    public static int getPolicy(Element dep) throws ConfigurationException {
-        String policy = dep.getAttribute("policy");
-        if (policy == null || policy.equalsIgnoreCase("dynamic")) {
-            return DYNAMIC_BINDING_POLICY;
-        } else if (policy.equalsIgnoreCase("dynamic-priority")) {
-            return DYNAMIC_PRIORITY_BINDING_POLICY;
-        } else if (policy.equalsIgnoreCase("static")) {
-            return STATIC_BINDING_POLICY;
-        } else {
-            throw new ConfigurationException("Binding policy unknown : " + policy);
-        }
-    }
-
-    /**
      * Opens the tracking.
-     * This method computes the dependency state
+     * This method computes the dependency state.
+     * <p/>
+     * As the dependency is starting, locking is not required here.
      *
-     * @see DependencyModel#computeDependencyState()
+     * @see DependencyModel#computeAndSetDependencyState()
      */
     public void start() {
         m_state = UNRESOLVED;
@@ -282,7 +211,7 @@ public abstract class DependencyModel {
             m_contextSourceManager.start();
         }
 
-        computeDependencyState();
+        computeAndSetDependencyState();
     }
 
     /**
@@ -291,22 +220,29 @@ public abstract class DependencyModel {
      * at the end of this method.
      */
     public void stop() {
-        if (m_tracker != null) {
-            m_tracker.close();
-            m_tracker = null;
-        }
-        m_boundServices.clear();
-        m_serviceReferenceManager.close();
-        ungetAllServices();
-        m_state = UNRESOLVED;
-        if (m_contextSourceManager != null) {
-            m_contextSourceManager.stop();
+        // We're stopping, we must take the exclusive lock
+        try {
+            acquireWriteLockIfNotHeld();
+            if (m_tracker != null) {
+                m_tracker.close();
+                m_tracker = null;
+            }
+            m_boundServices.clear();
+            m_serviceReferenceManager.close();
+            ungetAllServices();
+            m_state = UNRESOLVED;
+            if (m_contextSourceManager != null) {
+                m_contextSourceManager.stop();
+            }
+        } finally {
+            releaseWriteLockIfHeld();
         }
     }
 
     /**
      * Ungets all 'get' service references.
      * This also clears the service object map.
+     * The method is called while holding the exclusive lock.
      */
     private void ungetAllServices() {
         for (Map.Entry<ServiceReference, Object> entry : m_serviceObjects.entrySet()) {
@@ -338,7 +274,7 @@ public abstract class DependencyModel {
 
     /**
      * Unfreezes the dependency.
-     * This method must be overide by concrete dependency to support
+     * This method must be override by concrete dependency to support
      * the static binding policy. This method is called after tracking restarting.
      */
     public void unfreeze() {
@@ -346,7 +282,7 @@ public abstract class DependencyModel {
     }
 
     /**
-     * Does the service reference match ? This method must be override by
+     * Does the service reference match ? This method must be overridden by
      * concrete dependencies if they need advanced testing on service reference
      * (that cannot be expressed in the LDAP filter). By default this method
      * returns <code>true</code>.
@@ -361,17 +297,23 @@ public abstract class DependencyModel {
     /**
      * Computes the actual dependency state.
      * This methods invokes the {@link DependencyStateListener}.
+     * If this method is called without the write lock, it takes it. Anyway, the lock will be released before called
+     * the
+     * callbacks.
      */
-    private void computeDependencyState() {
-        // The dependency is broken, nothing else can be done
-        if (m_state == BROKEN) {
-            return;
-        }
+    private void computeAndSetDependencyState() {
+        try {
+            boolean mustCallValidate = false;
+            boolean mustCallInvalidate = false;
 
-        boolean mustCallValidate = false;
-        boolean mustCallInvalidate = false;
-        synchronized (this) {
-            if (m_optional || ! m_serviceReferenceManager.isEmpty()) {
+            acquireWriteLockIfNotHeld();
+
+            // The dependency is broken, nothing else can be done
+            if (m_state == BROKEN) {
+                return;
+            }
+
+            if (m_optional || !m_serviceReferenceManager.isEmpty()) {
                 // The dependency is valid
                 if (m_state == UNRESOLVED) {
                     m_state = RESOLVED;
@@ -384,13 +326,19 @@ public abstract class DependencyModel {
                     mustCallInvalidate = true;
                 }
             }
-        }
 
-        // Invoke callback in a non-synchronized region
-        if (mustCallInvalidate) {
-            invalidate();
-        } else if (mustCallValidate) {
-            validate();
+            // Invoke callback in a non-synchronized region
+            // First unlock the lock
+            releaseWriteLockIfHeld();
+            // Now we can call the callbacks
+            if (mustCallInvalidate) {
+                invalidate();
+            } else if (mustCallValidate) {
+                validate();
+            }
+        } finally {
+            // If we are still holding the exclusive lock, unlock it.
+            releaseWriteLockIfHeld();
         }
 
     }
@@ -402,12 +350,16 @@ public abstract class DependencyModel {
      *         else returns the first reference from the matching set.
      */
     public ServiceReference getServiceReference() {
-        synchronized (this) {
+        // Read lock required
+        try {
+            acquireReadLockIfNotHeld();
             if (m_boundServices.isEmpty()) {
                 return null;
             } else {
                 return m_boundServices.get(0);
             }
+        } finally {
+            releaseReadLockIfHeld();
         }
     }
 
@@ -418,11 +370,15 @@ public abstract class DependencyModel {
      *         references, <code>null</code> if no references are available.
      */
     public ServiceReference[] getServiceReferences() {
-        synchronized (this) {
+        // Read lock required
+        try {
+            acquireReadLockIfNotHeld();
             if (m_boundServices.isEmpty()) {
                 return null;
             }
             return m_boundServices.toArray(new ServiceReference[m_boundServices.size()]);
+        } finally {
+            releaseReadLockIfHeld();
         }
     }
 
@@ -433,7 +389,9 @@ public abstract class DependencyModel {
      * @return the list of used reference (according to the service tracker).
      */
     public List<ServiceReference> getUsedServiceReferences() {
-        synchronized (this) {
+        // Read lock required
+        try {
+            acquireReadLockIfNotHeld();
             // The list must confront actual matching services with already get services from the tracker.
 
             int size = m_boundServices.size();
@@ -456,6 +414,8 @@ public abstract class DependencyModel {
             }
 
             return list;
+        } finally {
+            releaseReadLockIfHeld();
         }
     }
 
@@ -463,6 +423,7 @@ public abstract class DependencyModel {
      * @return the component instance on which this dependency is plugged.
      */
     public ComponentInstance getComponentInstance() {
+        // No lock required as m_instance is final
         return m_instance;
     }
 
@@ -472,7 +433,12 @@ public abstract class DependencyModel {
      * @return the number of matching references
      */
     public int getSize() {
-        return m_boundServices.size();
+        try {
+            acquireReadLockIfNotHeld();
+            return m_boundServices.size();
+        } finally {
+            releaseReadLockIfHeld();
+        }
     }
 
     /**
@@ -514,6 +480,7 @@ public abstract class DependencyModel {
     /**
      * Calls the listener callback to notify the new state of the current
      * dependency.
+     * No lock hold when calling this callback.
      */
     private void invalidate() {
         m_listener.invalidate(this);
@@ -522,6 +489,7 @@ public abstract class DependencyModel {
     /**
      * Calls the listener callback to notify the new state of the current
      * dependency.
+     * No lock hold when calling this callback.
      */
     private void validate() {
         m_listener.validate(this);
@@ -529,11 +497,15 @@ public abstract class DependencyModel {
 
     /**
      * Gets the actual state of the dependency.
-     *
      * @return the state of the dependency.
      */
     public int getState() {
-        return m_state;
+        try {
+            acquireReadLockIfNotHeld();
+            return m_state;
+        } finally {
+            releaseReadLockIfHeld();
+        }
     }
 
     /**
@@ -548,6 +520,7 @@ public abstract class DependencyModel {
     /**
      * Sets the required specification of this service dependency.
      * This operation is not supported if the dependency tracking has already begun.
+     * So, we don't have to hold a lock.
      *
      * @param specification the required specification.
      */
@@ -560,13 +533,66 @@ public abstract class DependencyModel {
     }
 
     /**
+     * Acquires the write lock only and only if the write lock is not already held by the current thread.
+     * @return {@literal true} if the lock was acquired within the method, {@literal false} otherwise.
+     */
+    public boolean acquireWriteLockIfNotHeld() {
+        if (! m_lock.isWriteLockedByCurrentThread()) {
+            m_lock.writeLock().lock();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Releases the write lock only and only if the write lock is held by the current thread.
+     * @return {@literal true} if the lock has no more holders, {@literal false} otherwise.
+     */
+    public boolean releaseWriteLockIfHeld() {
+        if (m_lock.isWriteLockedByCurrentThread()) {
+            m_lock.writeLock().unlock();
+        }
+        return m_lock.getWriteHoldCount() == 0;
+    }
+
+    /**
+     * Acquires the read lock only and only if no read lock is already held by the current thread.
+     * @return {@literal true} if the lock was acquired within the method, {@literal false} otherwise.
+     */
+    public boolean acquireReadLockIfNotHeld() {
+        if (! m_lock.isWriteLockedByCurrentThread()) {
+            m_lock.writeLock().lock();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Releases the read lock only and only if the read lock is held by the current thread.
+     * @return {@literal true} if the lock has no more holders, {@literal false} otherwise.
+     */
+    public boolean releaseReadLockIfHeld() {
+        if (m_lock.isWriteLockedByCurrentThread()) {
+            m_lock.writeLock().unlock();
+        }
+        return m_lock.getWriteHoldCount() == 0;
+    }
+
+    /**
      * Returns the dependency filter (String form).
      *
      * @return the String form of the LDAP filter used by this dependency,
      *         <code>null</code> if not set.
      */
     public String getFilter() {
-        Filter filter = m_serviceReferenceManager.getFilter();
+        Filter filter;
+        try {
+            acquireReadLockIfNotHeld();
+            filter = m_serviceReferenceManager.getFilter();
+        } finally {
+            releaseReadLockIfHeld();
+        }
+
         if (filter == null) {
             return null;
         } else {
@@ -581,19 +607,30 @@ public abstract class DependencyModel {
      * @param filter the new LDAP filter.
      */
     public void setFilter(Filter filter) {
-        ServiceReferenceManager.ChangeSet changeSet;
-        synchronized (this) {
-            changeSet = m_serviceReferenceManager.setFilter(filter, m_tracker);
+        try {
+            acquireWriteLockIfNotHeld();
+            ServiceReferenceManager.ChangeSet changeSet = m_serviceReferenceManager.setFilter(filter, m_tracker);
+            // We call this method when holding the lock, but the method may decide to release the lock to invoke
+            // callbacks, so we must defensively unlock the lock in the finally block.
+            applyReconfiguration(changeSet);
+        } finally {
+            releaseWriteLockIfHeld();
         }
-
-        applyReconfiguration(changeSet);
     }
 
+    /**
+     * Applies the given reconfiguration.
+     * This method check if the current thread is holding the write lock, if not, acquire it.
+     * The lock will be released before calling callbacks. As a consequence, the caller has to check if the lock is
+     * still hold when this method returns.
+     * @param changeSet the reconfiguration changes
+     */
     public void applyReconfiguration(ServiceReferenceManager.ChangeSet changeSet) {
         List<ServiceReference> arr = new ArrayList<ServiceReference>();
         List<ServiceReference> dep = new ArrayList<ServiceReference>();
 
-        synchronized (this) {
+        try  {
+            acquireWriteLockIfNotHeld();
             if (m_tracker == null) {
                 // Nothing else to do.
                 return;
@@ -644,17 +681,26 @@ public abstract class DependencyModel {
                     }
                 }
             }
+        } finally {
+            releaseWriteLockIfHeld();
         }
 
+        // This method releases the exclusive lock.
+        computeAndSetDependencyState();
+
+        // As the previous method has released the lock, we can call the callback safely.
         onDependencyReconfiguration(
                 dep.toArray(new ServiceReference[dep.size()]),
                 arr.toArray(new ServiceReference[arr.size()]));
-        // Now, compute the new dependency state.
-        computeDependencyState();
     }
 
-    public synchronized boolean isAggregate() {
-        return m_aggregate;
+    public boolean isAggregate() {
+        try {
+            acquireReadLockIfNotHeld();
+            return m_aggregate;
+        } finally {
+            releaseReadLockIfHeld();
+        }
     }
 
     /**
@@ -663,36 +709,55 @@ public abstract class DependencyModel {
      *
      * @param isAggregate the new aggregate attribute value.
      */
-    public synchronized void setAggregate(boolean isAggregate) {
-        if (m_tracker == null) { // Not started ...
-            m_aggregate = isAggregate;
-        } else {
-            // We become aggregate.
-            if (!m_aggregate && isAggregate) {
-                m_aggregate = true;
-                // Call the callback on all non already injected service.
-                if (m_state == RESOLVED) {
+    public void setAggregate(boolean isAggregate) {
+        // Acquire the write lock here.
+        acquireWriteLockIfNotHeld();
+        List<ServiceReference> arrivals = new ArrayList<ServiceReference>();
+        List<ServiceReference> departures = new ArrayList<ServiceReference>();
+        try {
+            if (m_tracker == null) { // Not started ...
+                m_aggregate = isAggregate;
+            } else {
+                // We become aggregate.
+                if (!m_aggregate && isAggregate) {
+                    m_aggregate = true;
+                    // Call the callback on all non already injected service.
+                    if (m_state == RESOLVED) {
 
-                    for (ServiceReference ref : m_serviceReferenceManager.getSelectedServices()) {
-                        if (!m_boundServices.contains(ref)) {
-                            m_boundServices.add(ref);
-                            onServiceArrival(ref);
+                        for (ServiceReference ref : m_serviceReferenceManager.getSelectedServices()) {
+                            if (!m_boundServices.contains(ref)) {
+                                m_boundServices.add(ref);
+                                arrivals.add(ref);
+                            }
+                        }
+                    }
+                } else if (m_aggregate && !isAggregate) {
+                    m_aggregate = false;
+                    // We become non-aggregate.
+                    if (m_state == RESOLVED) {
+                        List<ServiceReference> list = new ArrayList<ServiceReference>(m_boundServices);
+                        for (int i = 1; i < list.size(); i++) { // The loop begin at 1, as the 0 stays injected.
+                            m_boundServices.remove(list.get(i));
+                            departures.add(list.get(i));
                         }
                     }
                 }
-            } else if (m_aggregate && !isAggregate) {
-                m_aggregate = false;
-                // We become non-aggregate.
-                if (m_state == RESOLVED) {
-                    List<ServiceReference> list = new ArrayList<ServiceReference>(m_boundServices);
-                    for (int i = 1; i < list.size(); i++) { // The loop begin at 1, as the 0 stays injected.
-                        m_boundServices.remove(list.get(i));
-                        onServiceDeparture(list.get(i));
-                    }
-                }
+                // Else, do nothing.
             }
-            // Else, do nothing.
+        } finally {
+            releaseWriteLockIfHeld();
         }
+
+        // Now call callbacks, the lock is not held anymore
+        // Only one of the list is not empty..
+        for (ServiceReference ref : arrivals) {
+            onServiceArrival(ref);
+        }
+        for (ServiceReference ref : departures) {
+            onServiceDeparture(ref);
+        }
+
+
     }
 
     /**
@@ -701,15 +766,26 @@ public abstract class DependencyModel {
      * @param isOptional the new optional attribute value.
      */
     public void setOptionality(boolean isOptional) {
-        if (m_tracker == null) { // Not started ...
-            m_optional = isOptional;
-        } else {
-            computeDependencyState();
+        try {
+            acquireWriteLockIfNotHeld();
+            if (m_tracker == null) { // Not started ...
+                m_optional = isOptional;
+            } else {
+                // This method releases the exclusive lock
+                computeAndSetDependencyState();
+            }
+        } finally {
+            releaseWriteLockIfHeld();
         }
     }
 
     public boolean isOptional() {
-        return m_optional;
+        try {
+            acquireReadLockIfNotHeld();
+            return m_optional;
+        } finally {
+            releaseReadLockIfHeld();
+        }
     }
 
     /**
@@ -718,25 +794,30 @@ public abstract class DependencyModel {
      * @return the current binding policy.
      */
     public int getBindingPolicy() {
-        return m_policy;
-    }
+        try {
+            acquireReadLockIfNotHeld();
+            return m_policy;
+        } finally {
+            releaseReadLockIfHeld();
+        }
 
-    /**
-     * Sets the binding policy.
-     * Not yet supported.
-     */
-    public void setBindingPolicy() {
-        throw new UnsupportedOperationException("Binding Policy change is not yet supported");
     }
 
     /**
      * Gets the used comparator name.
-     * <code>Null</code> if no comparator (i.e. the OSGi one is used).
+     * <code>null</code> if no comparator (i.e. the OSGi one is used).
      *
      * @return the comparator class name or <code>null</code> if the dependency doesn't use a comparator.
      */
-    public synchronized String getComparator() {
-        final Comparator<ServiceReference> comparator = m_serviceReferenceManager.getComparator();
+    public String getComparator() {
+        final Comparator<ServiceReference> comparator;
+        try {
+            acquireReadLockIfNotHeld();
+            comparator = m_serviceReferenceManager.getComparator();
+        } finally {
+            releaseReadLockIfHeld();
+        }
+
         if (comparator != null) {
             return comparator.getClass().getName();
         } else {
@@ -745,17 +826,18 @@ public abstract class DependencyModel {
     }
 
     public void setComparator(Comparator<ServiceReference> cmp) {
-        ServiceReferenceManager.ChangeSet changeSet;
-        synchronized (this) {
-            changeSet = m_serviceReferenceManager.setComparator(cmp);
+        try {
+            acquireWriteLockIfNotHeld();
+            ServiceReferenceManager.ChangeSet changeSet = m_serviceReferenceManager.setComparator(cmp);
+            applyReconfiguration(changeSet);
+        } finally {
+            releaseWriteLockIfHeld();
         }
-
-        applyReconfiguration(changeSet);
     }
 
     /**
      * Sets the bundle context used by this dependency.
-     * This operation is not supported if the tracker is already opened.
+     * This operation is not supported if the tracker is already opened, and as a consequence does not require locking.
      *
      * @param context the bundle context or service context to use
      */
@@ -787,19 +869,27 @@ public abstract class DependencyModel {
      */
     public Object getService(ServiceReference ref, boolean store) {
         Object svc = m_tracker.getService(ref);
+        IPOJOServiceFactory factory = null;
 
         if (svc instanceof IPOJOServiceFactory) {
-            Object obj = ((IPOJOServiceFactory) svc).getService(m_instance);
-            if (store) {
-                m_serviceObjects.put(ref, svc); // We store the factory !
-            }
-            return obj;
-        } else {
-            if (store) {
-                m_serviceObjects.put(ref, svc);
-            }
-            return svc;
+            factory = (IPOJOServiceFactory) svc;
+            svc = factory.getService(m_instance);
         }
+
+        if (store) {
+            try {
+                acquireWriteLockIfNotHeld();
+                if (factory != null) {
+                    m_serviceObjects.put(ref, factory);
+                } else {
+                    m_serviceObjects.put(ref, svc);
+                }
+            } finally {
+                releaseWriteLockIfHeld();
+            }
+        }
+
+        return svc;
     }
 
     /**
@@ -809,13 +899,22 @@ public abstract class DependencyModel {
      */
     public void ungetService(ServiceReference ref) {
         m_tracker.ungetService(ref);
-        Object obj = m_serviceObjects.remove(ref);  // Remove the service object
+        Object obj;
+        try {
+            acquireWriteLockIfNotHeld();
+            obj = m_serviceObjects.remove(ref);
+        } finally {
+            releaseWriteLockIfHeld();
+        }
+
+        // Call the callback outside the lock.
         if (obj != null && obj instanceof IPOJOServiceFactory) {
             ((IPOJOServiceFactory) obj).ungetService(m_instance, obj);
         }
     }
 
     public ContextSourceManager getContextSourceManager() {
+        // Final member, no lock required.
         return m_contextSourceManager;
     }
 
@@ -825,108 +924,127 @@ public abstract class DependencyModel {
      * @return the dependency id. Specification name by default.
      */
     public String getId() {
+        // Immutable, no lock required.
         return getSpecification().getName();
     }
 
+    private void breakDependency() {
+        // Static dependency broken.
+        m_state = BROKEN;
+
+        // We are going to call callbacks, releasing the lock.
+        releaseWriteLockIfHeld();
+        invalidate();  // This will invalidate the instance.
+        m_instance.stop(); // Stop the instance
+        unfreeze();
+        m_instance.start();
+    }
+
+    /**
+     * Callbacks call by the ServiceReferenceManager when the selected service set has changed.
+     * @param set the change set.
+     */
     public void onChange(ServiceReferenceManager.ChangeSet set) {
-        // The selected service have changed.
-        //TODO Synchro
-
-        // First handle the static case with a frozen state
-        if (isFrozen() && getState() != BROKEN) {
-            for (ServiceReference ref : set.departures) {
-                // Check if any of the service that have left was in used.
-                if (m_boundServices.contains(ref)) {
-                    // Static dependency broken.
-
-                    // Reinitialize the dependency tracking
-                    ComponentInstance instance;
-                    synchronized (this) {
-                        instance = m_instance;
-                        // Static dependency broken.
-                        m_state = BROKEN;
+        try {
+            acquireWriteLockIfNotHeld();
+            // First handle the static case with a frozen state
+            if (isFrozen() && getState() != BROKEN) {
+                for (ServiceReference ref : set.departures) {
+                    // Check if any of the service that have left was in used.
+                    if (m_boundServices.contains(ref)) {
+                        breakDependency();
+                        return;
                     }
-                    invalidate();  // This will invalidate the instance.
-                    instance.stop(); // Stop the instance
-                    unfreeze();
-                    instance.start();
-                    return;
                 }
             }
-        }
 
-        // Manage departures
-        // We unbind all bound services that are leaving.
-        for (ServiceReference ref : set.departures) {
-            if (m_boundServices.contains(ref)) {
-                // We were using the reference
-                m_boundServices.remove(ref);
+            List<ServiceReference> arrivals = new ArrayList<ServiceReference>();
+            List<ServiceReference> departures = new ArrayList<ServiceReference>();
+
+            // Manage departures
+            // We unbind all bound services that are leaving.
+            for (ServiceReference ref : set.departures) {
+                if (m_boundServices.contains(ref)) {
+                    // We were using the reference
+                    m_boundServices.remove(ref);
+                    departures.add(ref);
+                }
+            }
+
+            // Manage arrivals
+            // For aggregate dependencies, call onServiceArrival for all services not-yet-bound and in the order of the
+            // selection.
+            if (m_aggregate) {
+                // If the dependency is not already in used,
+                // the bindings must be sorted as in set.selected
+                if (m_serviceObjects.isEmpty() || DYNAMIC_PRIORITY_BINDING_POLICY == getBindingPolicy()) {
+                    m_boundServices.clear();
+                    m_boundServices.addAll(set.selected);
+                }
+
+                // Now we notify from the arrival.
+                // If we didn't add the reference yet, we add it.
+                for (ServiceReference ref : set.arrivals) {
+                    // We bind all not-already bound services, so it's an arrival
+                    if (!m_boundServices.contains(ref)) {
+                        m_boundServices.add(ref);
+                    }
+                    arrivals.add(ref);
+                }
+            } else {
+                if (!set.selected.isEmpty()) {
+                    final ServiceReference best = set.selected.get(0);
+                    // We have a provider
+                    if (m_boundServices.isEmpty()) {
+                        // We are not bound with anyone yet, so take the first of the selected set
+                        m_boundServices.add(best);
+                        arrivals.add(best);
+                    } else {
+                        final ServiceReference current = m_boundServices.get(0);
+                        // We are already bound, to the rebinding decision depends on the binding strategy
+                        if (getBindingPolicy() == DYNAMIC_PRIORITY_BINDING_POLICY) {
+                            // Rebinding in the DP binding policy if the bound one if not the new best one.
+                            if (current != best) {
+                                m_boundServices.remove(current);
+                                m_boundServices.add(best);
+                                departures.add(current);
+                                arrivals.add(best);
+                            }
+                        } else {
+                            // In static and dynamic binding policy, if the service is not yet used and the new best is not
+                            // the currently selected one, we should switch.
+                            boolean isUsed = m_serviceObjects.containsKey(current);
+                            if (!isUsed && current != best) {
+                                m_boundServices.remove(current);
+                                m_boundServices.add(best);
+                                departures.add(current);
+                                arrivals.add(best);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Leaving the locked region to invoke callbacks
+            releaseWriteLockIfHeld();
+            for (ServiceReference ref : departures) {
                 onServiceDeparture(ref);
             }
-        }
-
-        // Manage arrivals
-        // For aggregate dependencies, call onServiceArrival for all services not-yet-bound and in the order of the
-        // selection.
-        if (isAggregate()) {
-            // If the dependency is not already in used,
-            // the bindings must be sorted as in set.selected
-            if (m_serviceObjects.isEmpty()  || DYNAMIC_PRIORITY_BINDING_POLICY == getBindingPolicy()) {
-                m_boundServices.clear();
-                m_boundServices.addAll(set.selected);
-            }
-
-            // Now we notify from the arrival.
-            // If we didn't add the reference yet, we add it.
-            for (ServiceReference ref : set.arrivals) {
-                // We bind all not-already bound services, so it's an arrival
-                if (!m_boundServices.contains(ref)) {
-                    m_boundServices.add(ref);
-                }
+            for (ServiceReference ref : arrivals) {
                 onServiceArrival(ref);
             }
-        } else {
-            if (!set.selected.isEmpty()) {
-                final ServiceReference best = set.selected.get(0);
-                // We have a provider
-                if (m_boundServices.isEmpty()) {
-                    // We are not bound with anyone yet, so take the first of the selected set
-                    m_boundServices.add(best);
-                    onServiceArrival(best);
-                } else {
-                    final ServiceReference current = m_boundServices.get(0);
-                    // We are already bound, to the rebinding decision depends on the binding strategy
-                    if (getBindingPolicy() == DYNAMIC_PRIORITY_BINDING_POLICY) {
-                        // Rebinding in the DP binding policy if the bound one if not the new best one.
-                        if (current != best) {
-                            m_boundServices.remove(current);
-                            m_boundServices.add(best);
-                            onServiceDeparture(current);
-                            onServiceArrival(best);
-                        }
-                    } else {
-                        // In static and dynamic binding policy, if the service is not yet used and the new best is not
-                        // the currently selected one, we should switch.
-                        boolean isUsed = m_serviceObjects.containsKey(current);
-                        if (! isUsed  && current != best) {
-                            m_boundServices.remove(current);
-                            m_boundServices.add(best);
-                            onServiceDeparture(current);
-                            onServiceArrival(best);
-                        }
-                    }
-                }
+            // Do we have a modified service ?
+            if (set.modified != null && m_boundServices.contains(set.modified)) {
+                onServiceModification(set.modified);
             }
+
+
+            // Did our state changed ?
+            // this method will manage its own synchronization.
+            computeAndSetDependencyState();
+        } finally {
+            releaseWriteLockIfHeld();
         }
-
-        // Did our state changed ?
-        computeDependencyState();
-
-        // Do we have a modified service ?
-        if (set.modified != null && m_boundServices.contains(set.modified)) {
-            onServiceModification(set.modified);
-        }
-
     }
 
     public ServiceReferenceManager getServiceReferenceManager() {

@@ -34,11 +34,12 @@ import java.util.List;
 
 /**
  * A class managing the tracking and the choice of services.
+ * As this class is tied to the dependency model, it reuses the same locks objects.
  */
 public class ServiceReferenceManager implements TrackerCustomizer {
 
     /**
-     * The dependency
+     * The dependency.
      */
     private final DependencyModel m_dependency;
     /**
@@ -66,6 +67,13 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private ServiceRankingInterceptor m_interceptor;
 
 
+    /**
+     * Creates the service reference manager.
+     *
+     * @param dep        the dependency
+     * @param filter     the filter
+     * @param comparator the comparator
+     */
     public ServiceReferenceManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
         m_dependency = dep;
         m_filter = filter;
@@ -100,40 +108,87 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         return match;
     }
 
-    public synchronized List<ServiceReference> getAllServices() {
-        return new ArrayList<ServiceReference>(m_matchingReferences);
-    }
-
-    public synchronized List<ServiceReference> getSelectedServices() {
-        return new ArrayList<ServiceReference>(m_selectedReferences);
-    }
-
-    public synchronized ServiceReference getFirstService() {
-        if (m_selectedReferences.isEmpty()) {
-            return null;
+    public List<ServiceReference> getAllServices() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return new ArrayList<ServiceReference>(m_matchingReferences);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
         }
-        return m_selectedReferences.get(0);
     }
 
-    public synchronized boolean contains(ServiceReference ref) {
-        return m_selectedReferences.contains(ref);
+    public List<ServiceReference> getSelectedServices() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return new ArrayList<ServiceReference>(m_selectedReferences);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
     }
 
-    public synchronized boolean matchingContains(ServiceReference ref) {
-        return m_matchingReferences.contains(ref);
+    public ServiceReference getFirstService() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            if (m_selectedReferences.isEmpty()) {
+                return null;
+            }
+            return m_selectedReferences.get(0);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
     }
 
-    public synchronized void reset() {
-        m_matchingReferences.clear();
-        m_selectedReferences.clear();
+    public boolean contains(ServiceReference ref) {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return m_selectedReferences.contains(ref);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+    }
+
+    public boolean matchingContains(ServiceReference ref) {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return m_matchingReferences.contains(ref);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+
+    }
+
+    public void reset() {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
+            m_matchingReferences.clear();
+            m_selectedReferences.clear();
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
+        }
+
     }
 
     public boolean addingService(ServiceReference reference) {
-        return !(m_dependency.getState() == DependencyModel.BROKEN || m_dependency.isFrozen());
+        // We are doing two tests, we must get the read lock
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return !(m_dependency.getState() == DependencyModel.BROKEN || m_dependency.isFrozen());
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
     }
 
     public void addedService(ServiceReference reference) {
-        if (match(m_filter, reference) && m_dependency.match(reference)  && ! m_matchingReferences.contains(reference)) {
+        boolean match;
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            match = match(m_filter, reference) && m_dependency.match(reference) && !m_matchingReferences.contains(reference);
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+        if (match) {
+            // Callback invoked outside of locks.
+            // The called method is taking the write lock anyway.
             onNewMatchingService(reference);
         }
     }
@@ -141,7 +196,8 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private void onNewMatchingService(ServiceReference reference) {
         ServiceReference oldFirst;
         RankingResult result;
-        synchronized (this) {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
 
@@ -152,6 +208,8 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             result = applyRankingOnArrival(reference);
             // Set the selected services.
             m_selectedReferences = result.selected;
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
         }
         // Fire the event (outside from the synchronized region)
         fireUpdate(getSelectedServices(), result.departures, result.arrivals, oldFirst,
@@ -161,12 +219,13 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private void onModificationOfAMatchingService(ServiceReference reference, Object service) {
         ServiceReference oldFirst;
         RankingResult result;
-        synchronized (this) {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
 
             // We add the reference to the matching list if not there yet.
-            if (! m_matchingReferences.contains(reference)) {
+            if (!m_matchingReferences.contains(reference)) {
                 m_matchingReferences.add(reference);
             }
 
@@ -174,6 +233,8 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             result = applyRankingOnModification(reference);
             // Set the selected services.
             m_selectedReferences = result.selected;
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
         }
         // Fire the event (outside from the synchronized region)
         fireUpdate(getSelectedServices(), result.departures, result.arrivals, oldFirst,
@@ -239,22 +300,20 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         // 2) the service was not matching and matches -> it's an arrival
         // 3) the service was matching and still matches -> it's a modification.
 
-        synchronized (this) {
-            if (matchingContains(reference)) {
-                // Either case 1 or 3
-                if (match(m_filter, reference) && m_dependency.match(reference)) {
-                    // Case 3
-                    // We need to re-apply ranking.
-                    onModificationOfAMatchingService(reference, service);
-                } else {
-                    // Case 1
-                    removedService(reference, service);
-                }
+        if (matchingContains(reference)) {
+            // Either case 1 or 3
+            if (match(m_filter, reference) && m_dependency.match(reference)) {
+                // Case 3
+                // We need to re-apply ranking.
+                onModificationOfAMatchingService(reference, service);
             } else {
-                if (match(m_filter, reference) && m_dependency.match(reference)) {
-                    // Case 2
-                    onNewMatchingService(reference);
-                }
+                // Case 1
+                removedService(reference, service);
+            }
+        } else {
+            if (match(m_filter, reference) && m_dependency.match(reference)) {
+                // Case 2
+                onNewMatchingService(reference);
             }
         }
     }
@@ -262,7 +321,8 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     public void removedService(ServiceReference reference, Object service) {
         ServiceReference oldFirst;
         RankingResult result = null;
-        synchronized (this) {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
             if (m_matchingReferences.remove(reference)) {
@@ -271,6 +331,8 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                 // Set the selected services.
                 m_selectedReferences = result.selected;
             }
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
         }
         // Fire the event (outside from the synchronized region)
         if (result != null) {
@@ -286,64 +348,88 @@ public class ServiceReferenceManager implements TrackerCustomizer {
      * @param filter  the new filter
      * @param tracker the tracker
      */
-    public synchronized ChangeSet setFilter(Filter filter, Tracker tracker) {
-        m_filter = filter;
-        if (tracker == null) {
-            // Tracker closed, no problem
-            return new ChangeSet(Collections.<ServiceReference>emptyList(),
-                    Collections.<ServiceReference>emptyList(),
-                    Collections.<ServiceReference>emptyList(),
-                    null,
-                    null,
-                    null,
-                    null);
-        } else {
-            // The tracker is open, we must recheck all services.
+    public ChangeSet setFilter(Filter filter, Tracker tracker) {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
+            m_filter = filter;
+            if (tracker == null) {
+                // Tracker closed, no problem
+                return new ChangeSet(Collections.<ServiceReference>emptyList(),
+                        Collections.<ServiceReference>emptyList(),
+                        Collections.<ServiceReference>emptyList(),
+                        null,
+                        null,
+                        null,
+                        null);
+            } else {
+                // The tracker is open, we must recheck all services.
+                ServiceReference oldBest = getFirstService();
 
-            ServiceReference oldBest = getFirstService();
-
-            // Recompute the matching services.
-            m_matchingReferences.clear();
-            for (ServiceReference reference : tracker.getServiceReferencesList()) {
-                if (match(m_filter, reference)  && m_dependency.match(reference)) {
-                    // Matching service
-                    m_matchingReferences.add(reference);
+                // Recompute the matching services.
+                m_matchingReferences.clear();
+                for (ServiceReference reference : tracker.getServiceReferencesList()) {
+                    if (match(m_filter, reference) && m_dependency.match(reference)) {
+                        // Matching service
+                        m_matchingReferences.add(reference);
+                    }
                 }
+
+                // We have the new matching set.
+
+                List<ServiceReference> beforeRanking = getSelectedServices();
+                List<ServiceReference> references = m_interceptor.getServiceReferences(m_dependency, getAllServices());
+                RankingResult result = computeDifferences(beforeRanking, references);
+                m_selectedReferences = result.selected;
+                return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
+                        null, null);
             }
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
+        }
+    }
 
-            // We have the new matching set.
+    public boolean isEmpty() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return m_selectedReferences.isEmpty();
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+    }
 
+    public Comparator<ServiceReference> getComparator() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return m_comparator;
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+    }
+
+    public Filter getFilter() {
+        try {
+            m_dependency.acquireReadLockIfNotHeld();
+            return m_filter;
+        } finally {
+            m_dependency.releaseReadLockIfHeld();
+        }
+    }
+
+    public ChangeSet setComparator(Comparator<ServiceReference> cmp) {
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
+            m_comparator = cmp;
+            ServiceReference oldBest = getFirstService();
             List<ServiceReference> beforeRanking = getSelectedServices();
+            m_interceptor = new ComparatorBasedServiceRankingInterceptor(cmp);
             List<ServiceReference> references = m_interceptor.getServiceReferences(m_dependency, getAllServices());
             RankingResult result = computeDifferences(beforeRanking, references);
             m_selectedReferences = result.selected;
             return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
                     null, null);
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
         }
-    }
-
-    public synchronized boolean isEmpty() {
-        return m_selectedReferences.isEmpty();
-    }
-
-    public Comparator<ServiceReference> getComparator() {
-        return m_comparator;
-    }
-
-    public Filter getFilter() {
-        return m_filter;
-    }
-
-    public ChangeSet setComparator(Comparator<ServiceReference> cmp) {
-        m_comparator = cmp;
-        ServiceReference oldBest = getFirstService();
-        List<ServiceReference> beforeRanking = getSelectedServices();
-        m_interceptor = new ComparatorBasedServiceRankingInterceptor(cmp);
-        List<ServiceReference> references = m_interceptor.getServiceReferences(m_dependency, getAllServices());
-        RankingResult result = computeDifferences(beforeRanking, references);
-        m_selectedReferences = result.selected;
-        return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
-                null, null);
     }
 
     public void close() {
@@ -377,7 +463,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                          List<ServiceReference> departures, List<ServiceReference> arrivals,
                          ServiceReference oldFirst, ServiceReference newFirst,
                          Object service, ServiceReference modified) {
-            selected = selectedServices;
+            this.selected = selectedServices;
             this.departures = departures;
             this.arrivals = arrivals;
             this.oldFirstReference = oldFirst;
