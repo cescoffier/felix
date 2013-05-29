@@ -37,6 +37,8 @@ import static org.apache.felix.ipojo.dependency.impl.DependencyProperties.getDep
  */
 public class InterceptableIPOJOContext extends IPojoContext implements TrackerCustomizer {
 
+    //TODO Add getService interception.
+
     private final BundleContext m_context;
     private final DependencyModel m_dependency;
     private final List<UponAcceptationServiceListener> m_listeners = new ArrayList<UponAcceptationServiceListener>();
