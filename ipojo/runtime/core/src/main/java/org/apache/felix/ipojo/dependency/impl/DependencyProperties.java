@@ -22,6 +22,7 @@ package org.apache.felix.ipojo.dependency.impl;
 import org.apache.felix.ipojo.Factory;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.Bundle;
+import org.osgi.framework.Constants;
 
 import java.util.Dictionary;
 import java.util.Hashtable;
@@ -50,6 +51,10 @@ public class DependencyProperties {
         properties.put("dependency.specification", dependency.getSpecification().getName());
         properties.put("dependency.id", dependency.getId());
         properties.put("dependency.state", dependency.getState());
+
+        // We also provide the objectclass property, and to be compliant with the osgi specification,
+        // we put an array in the dictionary
+        properties.put(Constants.OBJECTCLASS, new String[] { dependency.getSpecification().getName()});
 
         return properties;
     }
