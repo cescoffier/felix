@@ -20,9 +20,10 @@
 package org.apache.felix.ipojo.dependency.impl;
 
 import org.apache.felix.ipojo.Factory;
+import org.apache.felix.ipojo.dependency.interceptors.ServiceTrackingInterceptor;
 import org.apache.felix.ipojo.util.DependencyModel;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.Constants;
+import org.apache.felix.ipojo.util.Log;
+import org.osgi.framework.*;
 
 import java.util.Dictionary;
 import java.util.Hashtable;
@@ -57,5 +58,27 @@ public class DependencyProperties {
         properties.put(Constants.OBJECTCLASS, new String[] { dependency.getSpecification().getName()});
 
         return properties;
+    }
+
+    public static boolean match(ServiceReference reference, DependencyModel dependency) {
+        Object v = reference.getProperty(ServiceTrackingInterceptor.TARGET_PROPERTY);
+        Filter filter = null;
+        if (v instanceof Filter) {
+            filter = (Filter) v;
+        } else if (v instanceof String) {
+            try {
+                filter = dependency.getBundleContext().createFilter((String) v);
+            } catch (InvalidSyntaxException e) {
+                dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
+                        "Cannot build filter from the target property : " + v, e);
+            }
+        }
+
+        if (filter == null) {
+            return false; // Invalid interceptor.
+        }
+
+        Dictionary<String, ?> properties = getDependencyProperties(dependency);
+        return filter.match(properties);
     }
 }

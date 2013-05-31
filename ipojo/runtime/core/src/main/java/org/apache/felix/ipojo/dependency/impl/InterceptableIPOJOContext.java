@@ -168,17 +168,7 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
     }
 
     public boolean addingService(ServiceReference reference) {
-        return match(reference);
-    }
-
-    private boolean match(ServiceReference reference) {
-        Filter filter = (Filter) reference.getProperty(ServiceTrackingInterceptor.TARGET_PROPERTY);
-        if (filter == null) {
-            return false; // Invalid interceptor.
-        }
-
-        Dictionary<String, ?> properties = getDependencyProperties(m_dependency);
-        return filter.match(properties);
+        return DependencyProperties.match(reference, m_dependency);
     }
 
     public void addedService(ServiceReference reference) {
