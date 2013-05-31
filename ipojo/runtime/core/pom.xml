@@ -163,7 +163,7 @@
                             org.apache.felix.ipojo.handlers.providedservice.*; version="${ipojo.package.version}",
                             org.apache.felix.ipojo.handlers.configuration; version="${ipojo.package.version}",
                             org.apache.felix.ipojo.context; version="${ipojo.package.version}",
-                            org.apache.felix.ipojo.dependency.interceptors; version="${ipojo.package.version}"
+                            org.apache.felix.ipojo.dependency.interceptors; version="${ipojo.package.version}",
                             <!-- Compendium packages -->
                             org.osgi.service.cm,
                             org.osgi.service.log
