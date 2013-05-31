@@ -204,6 +204,7 @@ public abstract class DependencyModel {
      */
     public void start() {
         m_state = UNRESOLVED;
+        m_serviceReferenceManager.open();
         m_tracker = new Tracker(m_context, m_specification.getName(), m_serviceReferenceManager);
         m_tracker.open();
 
@@ -212,6 +213,23 @@ public abstract class DependencyModel {
         }
 
         computeAndSetDependencyState();
+    }
+
+    /**
+     * Gets the bundle context used by the dependency.
+     * @return the bundle context
+     */
+    public BundleContext getBundleContext() {
+        // Immutable member, no lock required.
+        return m_context;
+    }
+
+    /**
+     * This callback is called by ranking interceptor to notify the dependency that the selected service set has
+     * changed and must be recomputed.
+     */
+    public void invalidateSelectedServices() {
+        m_serviceReferenceManager.invalidateSelectedServices();
     }
 
     /**
