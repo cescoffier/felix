@@ -434,7 +434,7 @@ public class Tracker implements TrackerCustomizer {
                     tracked.put(reference, object);
                     return object;
                 }
-            } else { // The object was already get.
+            } else { // The object was already retrieved.
                 return object;
             }
 
