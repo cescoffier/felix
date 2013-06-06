@@ -80,6 +80,14 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>2.4</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
         </plugins>
 
     </build>
@@ -87,8 +95,7 @@
     <properties>
         <exam.version>3.0.1</exam.version>
         <url.version>1.5.1</url.version>
-
-
+        <manipulator.version>1.10.1-SNAPSHOT</manipulator.version>
     </properties>
 
     <dependencies>
@@ -171,7 +178,7 @@
         <dependency>
             <groupId>org.apache.felix</groupId>
             <artifactId>org.apache.felix.ipojo.manipulator</artifactId>
-            <version>1.10.1-SNAPSHOT</version>
+            <version>${manipulator.version}</version>
         </dependency>
 
         <dependency>
@@ -189,7 +196,7 @@
         <dependency>
             <groupId>org.apache.felix</groupId>
             <artifactId>org.apache.felix.ipojo.annotations</artifactId>
-            <version>1.10.1-SNAPSHOT</version>
+            <version>${manipulator.version}</version>
         </dependency>
 
         <dependency>
@@ -397,9 +404,6 @@
 
         <profile>
             <id>test</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
             <build>
                 <plugins>
                     <plugin>

@@ -202,13 +202,6 @@ public class ComponentFactoryImpl<S> extends AbstractComponentManager<S> impleme
     }
 
 
-    public Object getInstance()
-    {
-        // this does not return the component instance actually
-        return null;
-    }
-
-
     public boolean hasConfiguration()
     {
         return m_hasConfiguration;
@@ -266,14 +259,9 @@ public class ComponentFactoryImpl<S> extends AbstractComponentManager<S> impleme
         return props;
     }
 
-    State getSatisfiedState()
+    boolean hasInstance()
     {
-        return Factory.getInstance();
-    }
-
-    State getActiveState()
-    {
-        return Factory.getInstance();
+        return false;
     }
 
     protected boolean collectDependencies()
@@ -527,12 +515,7 @@ public class ComponentFactoryImpl<S> extends AbstractComponentManager<S> impleme
         public ComponentFactoryNewInstance( BundleComponentActivator activator, ComponentHolder componentHolder,
                 ComponentMetadata metadata, ComponentMethods componentMethods )
         {
-            super( activator, componentHolder, metadata, componentMethods );
-        }
-
-        State getActiveState()
-        {
-            return FactoryInstance.getInstance();
+            super( activator, componentHolder, metadata, componentMethods, true );
         }
 
     }

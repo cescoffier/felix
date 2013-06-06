@@ -19,13 +19,13 @@
 
 package org.apache.felix.ipojo.bnd;
 
+import static java.lang.String.format;
+
 import aQute.lib.osgi.Analyzer;
 import aQute.lib.osgi.Clazz;
 import aQute.lib.osgi.Jar;
 import aQute.lib.osgi.Resource;
 import aQute.libg.reporter.Reporter;
-import org.apache.felix.ipojo.annotations.Component;
-import org.apache.felix.ipojo.manipulator.Pojoization;
 import org.apache.felix.ipojo.manipulator.ResourceStore;
 import org.apache.felix.ipojo.manipulator.ResourceVisitor;
 import org.apache.felix.ipojo.manipulator.render.MetadataRenderer;
@@ -69,6 +69,9 @@ public class BndJarResourceStore implements ResourceStore {
         Resource resource = m_analyzer.getJar().getResource(path);
         if (resource == null) {
             Jar embed = findJar(path);
+            if (embed == null) {
+                throw new IOException(format("Cannot find resource %s in jar and classpath", path));
+            }
             resource = embed.getResource(path);
         }
         InputStream is = null;
@@ -83,13 +86,9 @@ public class BndJarResourceStore implements ResourceStore {
     public void accept(ResourceVisitor visitor) {
 
         try {
-            // TODO make this configurable (react to other annotations)
-            // Only visit classes annotated with @Component or @Handler
-            String annotations = Component.class.getPackage().getName() + ".*";
-
+            // Collect all annotated classes
             Collection<Clazz> classes = m_analyzer.getClasses("",
-                    Clazz.QUERY.ANNOTATION.name(), annotations,
-                    Clazz.QUERY.NAMED.name(), "*");
+                    Clazz.QUERY.CLASSANNOTATIONS.name());
 
             classes = filter(classes);
 

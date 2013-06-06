@@ -21,6 +21,7 @@ package org.apache.felix.ipojo.manipulator.metadata.annotation.registry;
 
 import junit.framework.TestCase;
 import org.apache.felix.ipojo.manipulator.Reporter;
+import org.apache.felix.ipojo.manipulator.ResourceStore;
 import org.apache.felix.ipojo.manipulator.metadata.annotation.visitor.generic.FieldGenericVisitor;
 import org.apache.felix.ipojo.manipulator.metadata.annotation.visitor.generic.MethodGenericVisitor;
 import org.apache.felix.ipojo.manipulator.metadata.annotation.visitor.generic.ParameterGenericVisitor;
@@ -38,6 +39,7 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodNode;
 
+import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
@@ -46,6 +48,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.when;
 
 /**
@@ -64,6 +67,8 @@ public class SelectionTestCase extends TestCase {
     private AnnotationVisitorFactory factory;
     @Mock
     private AnnotationVisitor visitor;
+    @Mock
+    private ResourceStore store;
 
     @Override
     public void setUp() throws Exception {
@@ -71,6 +76,9 @@ public class SelectionTestCase extends TestCase {
         registry = new BindingRegistry(reporter);
         when(factory.newAnnotationVisitor(any(BindingContext.class)))
                 .thenReturn(visitor);
+        // Simulate a resource not found exception
+        when(store.read(anyString()))
+                .thenThrow(new IOException());
     }
 
     public void testSelectionOnClassNodeOnly() throws Exception {
@@ -149,7 +157,7 @@ public class SelectionTestCase extends TestCase {
         assertMethodSelection(OnMethodOnly.class, nullValue());
         assertParameterSelection(OnParameterOnly.class, nullValue());
 
-        registry.getDefaultBindings().addAll(Bindings.getDefaultBindings());
+        registry.getDefaultBindings().addAll(Bindings.newDefaultBindings(store, new AnnotationRegistry()));
 
         // Verifications
         assertClassSelection(OnTypeOnly.class, instanceOf(TypeGenericVisitor.class));
@@ -161,7 +169,7 @@ public class SelectionTestCase extends TestCase {
 
     private void assertClassSelection(Class<? extends Annotation> type, Matcher matcher) {
         Selection selection = new Selection(registry, null, reporter);
-        selection.type(classNode());
+        selection.type(null, classNode());
         selection.annotatedWith(descriptor(type));
 
         assertTrue(matcher.matches(selection.get()));
@@ -169,7 +177,7 @@ public class SelectionTestCase extends TestCase {
 
     private void assertFieldSelection(Class<? extends Annotation> type, Matcher matcher) {
         Selection selection = new Selection(registry, null, reporter);
-        selection.field(fieldNode());
+        selection.field(null, fieldNode());
         selection.annotatedWith(descriptor(type));
 
         assertTrue(matcher.matches(selection.get()));
@@ -177,7 +185,7 @@ public class SelectionTestCase extends TestCase {
 
     private void assertMethodSelection(Class<? extends Annotation> type, Matcher matcher) {
         Selection selection = new Selection(registry, null, reporter);
-        selection.method(methodNode());
+        selection.method(null, methodNode());
         selection.annotatedWith(descriptor(type));
 
         assertTrue(matcher.matches(selection.get()));
@@ -185,7 +193,7 @@ public class SelectionTestCase extends TestCase {
 
     private void assertParameterSelection(Class<? extends Annotation> type, Matcher matcher) {
         Selection selection = new Selection(registry, null, reporter);
-        selection.parameter(methodNode(), 0);
+        selection.parameter(null, methodNode(), 0);
         selection.annotatedWith(descriptor(type));
 
         assertTrue(matcher.matches(selection.get()));
@@ -204,7 +212,7 @@ public class SelectionTestCase extends TestCase {
     public void testSelectionWithEmptyRegistry() throws Exception {
         Selection selection = new Selection(registry, null, reporter);
 
-        selection.field(fieldNode())
+        selection.field(null, fieldNode())
                 .annotatedWith(descriptor(OnTypeOnly.class));
 
         assertNull(selection.get());

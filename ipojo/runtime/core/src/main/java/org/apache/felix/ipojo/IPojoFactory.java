@@ -22,6 +22,7 @@ import org.apache.felix.ipojo.architecture.ComponentTypeDescription;
 import org.apache.felix.ipojo.architecture.PropertyDescription;
 import org.apache.felix.ipojo.extender.internal.Extender;
 import org.apache.felix.ipojo.metadata.Element;
+import org.apache.felix.ipojo.util.Log;
 import org.apache.felix.ipojo.util.Logger;
 import org.apache.felix.ipojo.util.SecurityHelper;
 import org.osgi.framework.BundleContext;
@@ -84,7 +85,7 @@ public abstract class IPojoFactory implements Factory {
     /**
      * The list of required handlers.
      */
-    protected List<RequiredHandler> m_requiredHandlers = new ArrayList<RequiredHandler>();
+    protected final List<RequiredHandler> m_requiredHandlers = new ArrayList<RequiredHandler>();
 
     /**
      * The list of factory state listeners.
@@ -161,7 +162,7 @@ public abstract class IPojoFactory implements Factory {
             m_version = version;
         }
 
-        m_requiredHandlers = getRequiredHandlerList(); // Call sub-class to get the list of required handlers.
+        m_requiredHandlers.addAll(getRequiredHandlerList()); // Call sub-class to get the list of required handlers.
 
         m_logger.log(Logger.INFO, "New factory created : " + m_factoryName);
     }
@@ -366,7 +367,7 @@ public abstract class IPojoFactory implements Factory {
     }
 
     /**
-     * Computes the list of missing handlers. This method is called with the monitor lock.
+     * Computes the list of missing handlers.
      * @return the list of missing handlers.
      * @see org.apache.felix.ipojo.Factory#getMissingHandlers()
      */
@@ -392,12 +393,11 @@ public abstract class IPojoFactory implements Factory {
 
     /**
      * Gets the list of required handlers.
-     * This method is synchronized to avoid the concurrent modification
-     * of the required handlers.
+     * The required handler list cannot change.
      * @return the list of required handlers.
      * @see org.apache.felix.ipojo.Factory#getRequiredHandlers()
      */
-    public synchronized List<String> getRequiredHandlers() {
+    public List<String> getRequiredHandlers() {
         List<String> list = new ArrayList<String>();
         for (RequiredHandler req : m_requiredHandlers) {
             list.add(req.getFullName());
@@ -587,9 +587,9 @@ public abstract class IPojoFactory implements Factory {
      * Destroys the factory.
      * The factory cannot be restarted. Only the {@link Extender} can call this method.
      */
-    synchronized void dispose() {
+    public synchronized void dispose() {
         stop(); // Does not hold the lock.
-        m_requiredHandlers = null;
+        m_requiredHandlers.clear();
         m_listeners = null;
     }
 
@@ -629,13 +629,17 @@ public abstract class IPojoFactory implements Factory {
             }
             BundleContext bc = SecurityHelper.selectContextToRegisterServices(m_componentDesc.getFactoryInterfacesToPublish(),
                     m_context, getIPOJOBundleContext());
-            m_sr =
-                    bc.registerService(m_componentDesc.getFactoryInterfacesToPublish(), this, m_componentDesc
-                            .getPropertiesToPublish());
+            if (SecurityHelper.canRegisterService(bc)) {
+                m_sr =
+                        bc.registerService(m_componentDesc.getFactoryInterfacesToPublish(), this, m_componentDesc
+                                .getPropertiesToPublish());
+                m_logger.log(Logger.INFO, "Factory " + m_factoryName + " started");
+            } else {
+                m_logger.log(Log.ERROR, "Cannot register the Factory service with the bundle context of the bundle "
+                        + bc.getBundle().getBundleId() + " - the bundle is in the state " + bc.getBundle().getState()
+                );
+            }
         }
-
-        m_logger.log(Logger.INFO, "Factory " + m_factoryName + " started");
-
     }
 
     /**
@@ -644,7 +648,8 @@ public abstract class IPojoFactory implements Factory {
      */
     public void restart() {
     	// Call sub-class to get the list of required handlers.
-        m_requiredHandlers = getRequiredHandlerList();
+        m_requiredHandlers.clear();
+        m_requiredHandlers.addAll(getRequiredHandlerList());
     }
 
     /**
@@ -777,7 +782,9 @@ public abstract class IPojoFactory implements Factory {
 
                 m_state = VALID;
                 if (m_sr != null) {
-                    m_sr.setProperties(m_componentDesc.getPropertiesToPublish());
+                    if (SecurityHelper.canUpdateService(m_sr)) {
+                        m_sr.setProperties(m_componentDesc.getPropertiesToPublish());
+                    }
                 }
 
                 // Register the factory on the ConfigurationTracker
@@ -812,7 +819,8 @@ public abstract class IPojoFactory implements Factory {
 
                 m_componentInstances.clear();
 
-                if (m_sr != null) {
+                if (SecurityHelper.canUpdateService(m_sr)) {
+                    // No null check required as the security helper is checking this too.
                     m_sr.setProperties(m_componentDesc.getPropertiesToPublish());
                 }
             }
