@@ -43,6 +43,8 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
     private final DependencyModel m_dependency;
     private final List<UponAcceptationServiceListener> m_listeners = new ArrayList<UponAcceptationServiceListener>();
     private final Tracker m_tracker;
+    private final HashMap<ServiceReference, ServiceTrackingInterceptor> m_references = new HashMap<ServiceReference,
+            ServiceTrackingInterceptor>();
 
     public InterceptableIPOJOContext(DependencyModel dependency, BundleContext origin) {
         super(origin);
@@ -53,7 +55,7 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
         m_tracker.open();
     }
 
-    private <S> ServiceReference<S> accept(ServiceReference<S> reference) {
+    private ServiceReference accept(ServiceReference reference) {
         final Object[] services = m_tracker.getServices();
 
         // No interceptor.
@@ -61,10 +63,10 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
             return reference;
         }
 
-        ServiceReference<S> accumulator = reference;
+        ServiceReference accumulator = reference;
         for (Object svc : services) {
             ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) svc;
-            ServiceReference<S> accepted = interceptor.accept(m_dependency, m_context, reference);
+            ServiceReference accepted = interceptor.accept(m_dependency, m_context, reference);
             if (accepted != null) {
                 accumulator = accepted;
             } else {
@@ -89,6 +91,16 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
             }
         }
         return refs.toArray(new ServiceReference[refs.size()]);
+    }
+
+    @Override
+    public <S> S getService(ServiceReference<S> ref) {
+        ServiceTrackingInterceptor interceptor = m_references.get(ref);
+        if (interceptor == null) {
+            return m_context.getService(ref);
+        } else {
+            return interceptor.getService(ref);
+        }
     }
 
     @Override

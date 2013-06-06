@@ -37,8 +37,10 @@ public interface ServiceTrackingInterceptor {
 
     public void open(DependencyModel dependency, BundleContext context);
 
-    public <S> ServiceReference<S> accept(DependencyModel dependency, BundleContext context, ServiceReference<S> ref);
+    public ServiceReference accept(DependencyModel dependency, BundleContext context, ServiceReference ref);
 
     public void close(DependencyModel dependency, BundleContext context);
+
+    public <S> S getService(ServiceReference<S> reference);
 
 }
