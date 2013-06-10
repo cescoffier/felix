@@ -20,7 +20,6 @@
 package org.apache.felix.ipojo.dependency.impl;
 
 import org.apache.felix.ipojo.Factory;
-import org.apache.felix.ipojo.context.ServiceReferenceImpl;
 import org.apache.felix.ipojo.dependency.interceptors.ServiceRankingInterceptor;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.apache.felix.ipojo.util.Log;
@@ -36,10 +35,11 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * A class managing the tracking and the choice of services.
+ * This class is handling the transformations between the base service set and the selected service set.
+ * It handles the matching services and the selected service set.
  * As this class is tied to the dependency model, it reuses the same locks objects.
  */
-public class ServiceReferenceManager implements TrackerCustomizer {
+public class SelectedServicesManager implements TrackerCustomizer {
 
     /**
      * The dependency.
@@ -49,8 +49,10 @@ public class ServiceReferenceManager implements TrackerCustomizer {
      * The list of all matching service references. This list is a
      * subset of tracked references. This set is computed according
      * to the filter and the {@link DependencyModel#match(ServiceReference)} method.
+     *
+     * This is an array list to ease replacement of references due to reference transformation.
      */
-    private final List<ServiceReference> m_matchingReferences = new ArrayList<ServiceReference>();
+    private final ArrayList<ServiceReference> m_matchingReferences = new ArrayList<ServiceReference>();
     /**
      * The comparator to sort service references.
      */
@@ -80,7 +82,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
      * @param filter     the filter
      * @param comparator the comparator
      */
-    public ServiceReferenceManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
+    public SelectedServicesManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
         m_dependency = dep;
         m_filter = filter;
         if (comparator != null) {
@@ -89,29 +91,6 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         } else {
             m_interceptor = new EmptyBasedServiceRankingInterceptor();
         }
-    }
-
-    /**
-     * Checks if the given service reference match the current filter.
-     * This method aims to avoid calling {@link Filter#match(ServiceReference)}
-     * method when manipulating a composite reference. In fact, this method thrown
-     * a {@link ClassCastException} on Equinox.
-     *
-     * @param ref the service reference to check.
-     * @return <code>true</code> if the service reference matches.
-     */
-    public static boolean match(Filter filter, ServiceReference ref) {
-        boolean match = true;
-        if (filter != null) {
-            if (ref instanceof ServiceReferenceImpl) {
-                // Can't use the match(ref) as it throw a class cast exception on Equinox.
-                //noinspection unchecked
-                match = filter.match(((ServiceReferenceImpl) ref).getProperties());
-            } else { // Non composite reference.
-                match = filter.match(ref);
-            }
-        }
-        return match;
     }
 
     public void open() {
@@ -168,7 +147,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         m_tracker.open();
     }
 
-    public List<ServiceReference> getAllServices() {
+    public List<ServiceReference> getMatchingServices() {
         try {
             m_dependency.acquireReadLockIfNotHeld();
             return new ArrayList<ServiceReference>(m_matchingReferences);
@@ -192,6 +171,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             if (m_selectedReferences.isEmpty()) {
                 return null;
             }
+            System.out.println(m_selectedReferences.get(0));
             return m_selectedReferences.get(0);
         } finally {
             m_dependency.releaseReadLockIfHeld();
@@ -207,10 +187,16 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         }
     }
 
-    public boolean matchingContains(ServiceReference ref) {
+    /**
+     * Checks whether the matching set contains a reference with the same service.id as the given reference.
+     * @param ref the reference
+     * @return {@literal true} if the matching service set contains a reference with the same id as the given
+     * reference, {@literal false} otherwise
+     */
+    public boolean matchingContainsReferenceById(ServiceReference ref) {
         try {
             m_dependency.acquireReadLockIfNotHeld();
-            return m_matchingReferences.contains(ref);
+            return ServiceReferenceUtils.containsReferenceById(m_matchingReferences, ref);
         } finally {
             m_dependency.releaseReadLockIfHeld();
         }
@@ -242,7 +228,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         boolean match;
         try {
             m_dependency.acquireReadLockIfNotHeld();
-            match = match(m_filter, reference) && m_dependency.match(reference) && !m_matchingReferences.contains(reference);
+            match = ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference) && !matchingContainsReferenceById(reference);
         } finally {
             m_dependency.releaseReadLockIfHeld();
         }
@@ -262,7 +248,13 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             oldFirst = getFirstService();
 
             // We add the reference to the matching list.
-            m_matchingReferences.add(reference);
+            // If we already have a reference with the same id, replace it.
+            int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
+            if (currentIndex == -1) {
+                m_matchingReferences.add(reference);
+            } else {
+                m_matchingReferences.set(currentIndex, reference);
+            }
 
             // We apply our ranking strategy.
             result = applyRankingOnArrival(reference);
@@ -285,8 +277,12 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             oldFirst = getFirstService();
 
             // We add the reference to the matching list if not there yet.
-            if (!m_matchingReferences.contains(reference)) {
+            // If we already have a reference with the same id, replace it.
+            int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
+            if (currentIndex == -1) {
                 m_matchingReferences.add(reference);
+            } else {
+                m_matchingReferences.set(currentIndex, reference);
             }
 
             // We apply our ranking strategy.
@@ -304,7 +300,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private RankingResult applyRankingOnModification(ServiceReference reference) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceModified(m_dependency, getAllServices(),
+        List<ServiceReference> references = m_interceptor.onServiceModified(m_dependency, getMatchingServices(),
                 reference);
         return computeDifferences(beforeRanking, references);
     }
@@ -319,7 +315,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private RankingResult applyRankingOnArrival(ServiceReference ref) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceArrival(m_dependency, getAllServices(),
+        List<ServiceReference> references = m_interceptor.onServiceArrival(m_dependency, getMatchingServices(),
                 ref);
         // compute the differences
         return computeDifferences(beforeRanking, references);
@@ -329,7 +325,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     private RankingResult applyRankingOnDeparture(ServiceReference ref) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceDeparture(m_dependency, getAllServices(),
+        List<ServiceReference> references = m_interceptor.onServiceDeparture(m_dependency, getMatchingServices(),
                 ref);
         return computeDifferences(beforeRanking, references);
     }
@@ -340,13 +336,13 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         List<ServiceReference> arrivals = new ArrayList<ServiceReference>();
         // All references that are no more in the set are considered as leaving services.
         for (ServiceReference old : beforeRanking) {
-            if (!ranked.contains(old)) {
+            if (!ServiceReferenceUtils.containsReferenceById(ranked, old)) {
                 departures.add(old);
             }
         }
         // All references that are in `references` but not in `beforeRanking` are new services
         for (ServiceReference newRef : ranked) {
-            if (!beforeRanking.contains(newRef)) {
+            if (!ServiceReferenceUtils.containsReferenceById(beforeRanking, newRef)) {
                 arrivals.add(newRef);
             }
         }
@@ -355,27 +351,53 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     }
 
     public void modifiedService(ServiceReference reference, Object service) {
+        System.out.println("modification of " + reference);
         // We are handling a modified event, we have three case to handle
         // 1) the service was matching and does not march anymore -> it's a departure.
         // 2) the service was not matching and matches -> it's an arrival
         // 3) the service was matching and still matches -> it's a modification.
 
-        if (matchingContains(reference)) {
+        if (matchingContainsReferenceById(reference)) {
             // Either case 1 or 3
-            if (match(m_filter, reference) && m_dependency.match(reference)) {
+            if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
                 // Case 3
                 // We need to re-apply ranking.
+                System.out.println("case 3");
                 onModificationOfAMatchingService(reference, service);
             } else {
                 // Case 1
+                System.out.println("case 1");
                 removedService(reference, service);
             }
         } else {
-            if (match(m_filter, reference) && m_dependency.match(reference)) {
+            if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
                 // Case 2
+                System.out.println("case 2");
                 onNewMatchingService(reference);
             }
         }
+    }
+
+    /**
+     * Removes a service reference from the matching set. The reference is identified using the service.id property.
+     * @param ref the reference
+     * @return {@literal true} if the service reference was found and removed.
+     */
+    private boolean removeMatchingReferenceById(ServiceReference ref) {
+        try {
+            Object id = ref.getProperty(Constants.SERVICE_ID);
+            m_dependency.acquireWriteLockIfNotHeld();
+            for (ServiceReference reference : m_matchingReferences) {
+                if (reference.getProperty(Constants.SERVICE_ID).equals(id)) {
+                    return m_matchingReferences.remove(reference);
+                }
+            }
+            return false; // Not found.
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
+        }
+
+
     }
 
     public void removedService(ServiceReference reference, Object service) {
@@ -385,7 +407,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
-            if (m_matchingReferences.remove(reference)) {
+            if (removeMatchingReferenceById(reference)) {
                 // We apply our ranking strategy.
                 result = applyRankingOnDeparture(reference);
                 // Set the selected services.
@@ -428,9 +450,15 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                 // Recompute the matching services.
                 m_matchingReferences.clear();
                 for (ServiceReference reference : tracker.getServiceReferencesList()) {
-                    if (match(m_filter, reference) && m_dependency.match(reference)) {
+                    if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
                         // Matching service
-                        m_matchingReferences.add(reference);
+                        // If we already have a reference with the same id, replace it.
+                        int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
+                        if (currentIndex == -1) {
+                            m_matchingReferences.add(reference);
+                        } else {
+                            m_matchingReferences.set(currentIndex, reference);
+                        }
                     }
                 }
 
@@ -438,7 +466,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
 
                 List<ServiceReference> beforeRanking = getSelectedServices();
 
-                final List<ServiceReference> allServices = getAllServices();
+                final List<ServiceReference> allServices = getMatchingServices();
                 List<ServiceReference> references;
                 if (allServices.isEmpty()) {
                     references = Collections.emptyList();
@@ -493,7 +521,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             m_interceptor = interceptor;
             m_interceptor.open(m_dependency);
 
-            final List<ServiceReference> allServices = getAllServices();
+            final List<ServiceReference> allServices = getMatchingServices();
             List<ServiceReference> references = Collections.emptyList();
             if (!allServices.isEmpty()) {
                 references = m_interceptor.getServiceReferences(m_dependency, allServices);
@@ -527,7 +555,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_selectedReferences.clear();
-            m_interceptor.getServiceReferences(m_dependency, getAllServices());
+            m_interceptor.getServiceReferences(m_dependency, getMatchingServices());
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }
