@@ -21,14 +21,17 @@ package org.apache.felix.ipojo.dependency.impl;
 
 import org.apache.felix.ipojo.IPojoContext;
 import org.apache.felix.ipojo.dependency.interceptors.ServiceTrackingInterceptor;
+import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
 import org.apache.felix.ipojo.util.DependencyModel;
+import org.apache.felix.ipojo.util.Log;
 import org.apache.felix.ipojo.util.Tracker;
 import org.apache.felix.ipojo.util.TrackerCustomizer;
 import org.osgi.framework.*;
 
-import java.util.*;
-
-import static org.apache.felix.ipojo.dependency.impl.DependencyProperties.getDependencyProperties;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 
 /**
  * An `interceptable` implementation of the iPOJO Context. Each instance of this class are attached to a specific
@@ -37,40 +40,37 @@ import static org.apache.felix.ipojo.dependency.impl.DependencyProperties.getDep
  */
 public class InterceptableIPOJOContext extends IPojoContext implements TrackerCustomizer {
 
-    //TODO Add getService interception.
-
     private final BundleContext m_context;
     private final DependencyModel m_dependency;
     private final List<UponAcceptationServiceListener> m_listeners = new ArrayList<UponAcceptationServiceListener>();
-    private final Tracker m_tracker;
-    private final HashMap<ServiceReference, ServiceTrackingInterceptor> m_references = new HashMap<ServiceReference,
-            ServiceTrackingInterceptor>();
+    private final Tracker m_interceptorTracker;
 
     public InterceptableIPOJOContext(DependencyModel dependency, BundleContext origin) {
         super(origin);
         m_context = origin;
         m_dependency = dependency;
-
-        m_tracker = new Tracker(m_context, ServiceTrackingInterceptor.class.getName(), this);
-        m_tracker.open();
+        m_interceptorTracker = new Tracker(m_context, ServiceTrackingInterceptor.class.getName(), this);
     }
 
-    private ServiceReference accept(ServiceReference reference) {
-        final Object[] services = m_tracker.getServices();
+    private <S> TransformedServiceReference<S> accept(TransformedServiceReference<S> reference) {
+        final Object[] services = m_interceptorTracker.getServices();
 
         // No interceptor.
         if (services == null) {
             return reference;
         }
 
-        ServiceReference accumulator = reference;
+        TransformedServiceReference<S> accumulator = reference;
         for (Object svc : services) {
             ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) svc;
-            ServiceReference accepted = interceptor.accept(m_dependency, m_context, reference);
+            TransformedServiceReference<S> accepted = interceptor.accept(m_dependency, m_context, reference);
             if (accepted != null) {
                 accumulator = accepted;
             } else {
                 // refused by an interceptor
+                m_dependency.getComponentInstance().getFactory().getLogger().log(Log.INFO,
+                        "The service reference " + reference.getProperty(Constants.SERVICE_ID) + " was rejected by " +
+                                "interceptor " + interceptor);
                 return null;
             }
         }
@@ -78,29 +78,74 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
         return accumulator;
     }
 
-    private ServiceReference[] accept(ServiceReference[] references) {
+    public void open() {
+        m_interceptorTracker.open();
+    }
+
+    public void close() {
+        final Object[] services = m_interceptorTracker.getServices();
+
+        if (services != null) {
+            for (Object svc : services) {
+                ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) svc;
+                interceptor.close(m_dependency, m_context);
+            }
+        }
+
+        m_interceptorTracker.close();
+    }
+
+    private TransformedServiceReference[] accept(TransformedServiceReference[] references) {
         if (references == null) {
             return null;
         }
 
-        List<ServiceReference> refs = new ArrayList<ServiceReference>();
-        for (ServiceReference ref : references) {
-            ServiceReference accepted = accept(ref);
+        List<TransformedServiceReference> refs = new ArrayList<TransformedServiceReference>();
+        for (TransformedServiceReference ref : references) {
+            TransformedServiceReference accepted = accept(ref);
             if (accepted != null) {
                 refs.add(accepted);
             }
         }
-        return refs.toArray(new ServiceReference[refs.size()]);
+        if (refs.isEmpty()) {
+            return null;
+        } else {
+            return refs.toArray(new TransformedServiceReference[refs.size()]);
+        }
     }
 
     @Override
     public <S> S getService(ServiceReference<S> ref) {
-        ServiceTrackingInterceptor interceptor = m_references.get(ref);
-        if (interceptor == null) {
-            return m_context.getService(ref);
+        final Object[] services = m_interceptorTracker.getServices();
+
+        S result;
+        if (ref instanceof TransformedServiceReference) {
+            result = super.getService(((TransformedServiceReference<S>) ref).getInitialReference());
         } else {
-            return interceptor.getService(ref);
+            // Should not happen.
+            result = super.getService(ref);
         }
+
+        if (services != null && result != null) {
+            for (Object svc : services) {
+                ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) svc;
+                result = interceptor.getService(m_dependency, result, ref);
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public boolean ungetService(ServiceReference reference) {
+        final Object[] services = m_interceptorTracker.getServices();
+        boolean result = super.ungetService(reference);
+        if (services != null) {
+            for (Object svc : services) {
+                ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) svc;
+                interceptor.ungetService(m_dependency, result, reference);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -123,15 +168,30 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
 
     @Override
     public ServiceReference[] getAllServiceReferences(String clazz, String filter) throws InvalidSyntaxException {
-        ServiceReference[] references = m_context.getAllServiceReferences(clazz, filter);
-        return accept(references);
+        ServiceReference[] references = super.getAllServiceReferences(clazz, filter);
+        return accept(transform(references));
+    }
+
+    private <S> TransformedServiceReference<S>[] transform(ServiceReference<S>[] references) {
+        if (references == null) {
+            return null;
+        }
+        TransformedServiceReference<S>[] transformed = new TransformedServiceReference[references.length];
+        for (int i = 0; i < references.length; i++) {
+            transformed[i] = transform(references[i]);
+        }
+        return transformed;
+    }
+
+    private <S> TransformedServiceReference<S> transform(ServiceReference<S> reference) {
+        return new TransformedServiceReferenceImpl<S>(reference);
     }
 
     @Override
     public ServiceReference getServiceReference(String clazz) {
-        ServiceReference ref = m_context.getServiceReference(clazz);
+        ServiceReference ref = super.getServiceReference(clazz);
         if (ref != null) {
-            return accept(ref);
+            return accept(transform(ref));
         } else {
             return null;
         }
@@ -139,9 +199,9 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
 
     @Override
     public <S> ServiceReference<S> getServiceReference(Class<S> sClass) {
-        ServiceReference<S> ref = m_context.getServiceReference(sClass);
+        ServiceReference<S> ref = super.getServiceReference(sClass);
         if (ref != null) {
-            return accept(ref);
+            return accept(transform(ref));
         } else {
             return null;
         }
@@ -149,11 +209,11 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
 
     @Override
     public <S> Collection<ServiceReference<S>> getServiceReferences(Class<S> sClass, String filter) throws InvalidSyntaxException {
-        Collection<ServiceReference<S>> references = m_context.getServiceReferences(sClass, filter);
+        Collection<ServiceReference<S>> references = super.getServiceReferences(sClass, filter);
         // This method returns an empty set if no services match.
         HashSet<ServiceReference<S>> result = new HashSet<ServiceReference<S>>();
         for (ServiceReference<S> reference : references) {
-            ServiceReference<S> accepted = accept(reference);
+            ServiceReference<S> accepted = accept(transform(reference));
             if (accepted != null) {
                 result.add(accepted);
             }
@@ -163,7 +223,8 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
 
     @Override
     public ServiceReference[] getServiceReferences(String clazz, String filter) throws InvalidSyntaxException {
-        return super.getServiceReferences(clazz, filter);    //To change body of overridden methods use File | Settings | File Templates.
+        ServiceReference[] refs = super.getServiceReferences(clazz, filter);
+        return accept(transform(refs));
     }
 
     @Override
@@ -184,8 +245,52 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
     }
 
     public void addedService(ServiceReference reference) {
-        ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) m_tracker.getService(reference);
+        List<ServiceReference> base = m_dependency.getBaseServiceSet();
+
+        ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) m_interceptorTracker.getService(reference);
         interceptor.open(m_dependency, m_context);
+        // The new interceptor may change the visibility of the services, even the service reference.
+        // We must notify the dependency of the changes.
+
+        fireServiceEvents(base);
+    }
+
+    private void fireServiceEvents(List<ServiceReference> base) {
+        System.out.println(base);
+        ServiceReference[] references = ServiceReferenceUtils.getServiceReferencesBySpecification(m_dependency.getSpecification()
+                .getName(), m_context);
+
+        if (references == null) {
+            // All services are gone !
+            for (ServiceReference ref : base) {
+                TransformedServiceReference newReference = transform(ref);
+                if (newReference != null) {
+                    fireServiceEvent(new WrappedServiceEvent(ServiceEvent.UNREGISTERING, newReference));
+                }
+            }
+            return;
+        }
+
+        for (ServiceReference ref : references) {
+            TransformedServiceReference newReference = accept(transform(ref));
+            System.out.println(newReference);
+            // Is the reference already in base ?
+            ServiceReference baseServiceReference = ServiceReferenceUtils.getServiceReferenceById(base, ref);
+            if (baseServiceReference != null && newReference == null) {
+                // The new interceptor has rejected the reference.
+                // Fire a service departure event - the ref is not accepted by the new interceptor
+                fireServiceEvent(new WrappedServiceEvent(ServiceEvent.UNREGISTERING, newReference));
+            } else if (baseServiceReference == null && newReference != null) {
+                // Can this really happen ? A reference that was filtered out before becomes visible.
+                // This could happen if the interceptor having dropped the reference checks the availability of the new
+                // interceptor.
+                fireServiceEvent(new WrappedServiceEvent(ServiceEvent.REGISTERED, newReference));
+            } else if (baseServiceReference != null
+                    && !ServiceReferenceUtils.areStrictlyEquals(baseServiceReference, newReference)) {
+                System.out.println("Modification of " + newReference);
+                fireServiceEvent(new WrappedServiceEvent(ServiceEvent.MODIFIED, newReference));
+            }
+        }
     }
 
     public void modifiedService(ServiceReference reference, Object service) {
@@ -196,6 +301,17 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
     public void removedService(ServiceReference reference, Object service) {
         if (service != null) {
             ((ServiceTrackingInterceptor) service).close(m_dependency, m_context);
+            System.out.println("recomputing base set after departure");
+            // The base set was not yet updated.
+            List<ServiceReference> base = m_dependency.getBaseServiceSet();
+            fireServiceEvents(base);
+        }
+    }
+
+    private void fireServiceEvent(WrappedServiceEvent event) {
+        System.out.println("Firing event for " + event.getServiceReference() + " " + event.getType());
+        for (UponAcceptationServiceListener listener : m_listeners) {
+            listener.serviceChanged(event);
         }
     }
 
@@ -208,7 +324,7 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
         }
 
         public void serviceChanged(final ServiceEvent event) {
-            final ServiceReference accepted = accept(event.getServiceReference());
+            final ServiceReference accepted = accept(new TransformedServiceReferenceImpl(event.getServiceReference()));
             if (accepted != null) {
                 m_listener.serviceChanged(new WrappedServiceEvent(event, accepted));
             }
@@ -227,6 +343,28 @@ public class InterceptableIPOJOContext extends IPojoContext implements TrackerCu
          */
         public WrappedServiceEvent(ServiceEvent event, ServiceReference<?> modified) {
             super(event.getType(), event.getServiceReference());
+            m_modified = modified;
+        }
+
+        /**
+         * Creates a new service event object from scratch.
+         *
+         * @param type     the type of event.
+         * @param modified the modified service reference
+         */
+        public WrappedServiceEvent(int type, TransformedServiceReference<?> modified) {
+            super(type, modified.getInitialReference());
+            m_modified = modified;
+        }
+
+        /**
+         * Creates a new service event object from scratch.
+         *
+         * @param type     the type of event.
+         * @param modified the service reference
+         */
+        public WrappedServiceEvent(int type, ServiceReference<?> modified) {
+            super(type, modified);
             m_modified = modified;
         }
 
