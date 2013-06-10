@@ -1,0 +1,164 @@
+package org.apache.felix.ipojo.runtime.core.test.dependencies;
+
+import org.apache.felix.ipojo.ComponentInstance;
+import org.apache.felix.ipojo.runtime.core.test.services.CheckService;
+import org.apache.felix.ipojo.runtime.core.test.services.FooService;
+import org.junit.Before;
+import org.junit.Test;
+import org.osgi.framework.ServiceReference;
+import org.ow2.chameleon.testing.helpers.TimeUtils;
+
+import java.util.Dictionary;
+import java.util.Hashtable;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.fest.assertions.Assertions.assertThat;
+
+/**
+ * Checks Tracking interceptor transforming services
+ */
+public class TestTransformingServices extends Common {
+
+    private ComponentInstance provider;
+
+    @Before
+    public void setUp() {
+        provider = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
+                ".components.FooProvider");
+    }
+
+    @Test
+    public void testTransformationOfFoo() {
+        // Create the interceptor
+        Properties configuration = new Properties();
+        configuration.put("target", "(dependency.id=foo)");
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
+                ".AddLocationInterceptor", configuration);
+
+        // Create the FooConsumer
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components.FooConsumer");
+
+        osgiHelper.waitForService(CheckService.class.getName(), null, 1000, true);
+        CheckService check = osgiHelper.getServiceObject(CheckService.class);
+        assertThat(check.check());
+        @SuppressWarnings("unchecked") Map<String, ?> props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+    }
+
+    /**
+     * Same as previous but the interceptor arrives after the instance.
+     */
+    @Test
+    public void testDelayedTransformationOfFoo() {
+        // Create the FooConsumer
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components" +
+                ".FooConsumer");
+
+        // Create the interceptor
+        Properties configuration = new Properties();
+        configuration.put("target", "(dependency.id=foo)");
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
+                ".AddLocationInterceptor", configuration);
+
+        osgiHelper.waitForService(CheckService.class.getName(), null, 1000, true);
+        CheckService check = osgiHelper.getServiceObject(CheckService.class);
+        assertThat(check.check());
+        @SuppressWarnings("unchecked") Map<String, ?> props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isNull();
+        assertThat(props.get("hidden")).isNotNull();
+
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components" +
+                ".FooConsumer", "second");
+
+
+        ServiceReference ref = ipojoHelper.getServiceReferenceByName(CheckService.class.getName(), "second");
+        check = (CheckService) osgiHelper.getServiceObject(ref);
+
+        assertThat(check.check());
+        props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+    }
+
+    /**
+     * The interceptor makes the instance valid.
+     */
+    @Test
+    public void testTransformationMakingFilterMatch() {
+        // Create the FooConsumer
+        Properties configuration = new Properties();
+        Properties filters = new Properties();
+        filters.put("foo", "(location=kitchen)");
+        configuration.put("requires.filters", filters);
+        ComponentInstance consumer = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
+                ".components.FooConsumer", configuration);
+
+        // Invalid instance
+        assertThat(consumer.getInstanceDescription().getState()).isEqualTo(ComponentInstance.INVALID);
+
+        // Create the interceptor
+        Properties config = new Properties();
+        config.put("target", "(dependency.id=foo)");
+        ComponentInstance interceptor = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
+                ".interceptors" +
+                ".AddLocationInterceptor", config);
+
+        assertThat(consumer.getInstanceDescription().getState()).isEqualTo(ComponentInstance.VALID);
+
+        CheckService check = osgiHelper.getServiceObject(CheckService.class);
+
+        assertThat(check.check());
+        Map<String, ?> props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+
+        // Removing the interceptor should revert to the base set.
+        interceptor.dispose();
+        System.out.println(consumer.getInstanceDescription().getDescription());
+        assertThat(consumer.getInstanceDescription().getState()).isEqualTo(ComponentInstance.INVALID);
+    }
+
+    /**
+     * Checks the behavior when services arrives and leaves.
+     */
+    @Test
+    public void testTransformationOfDynamicFoo() {
+        // Create the interceptor
+        Properties configuration = new Properties();
+        configuration.put("target", "(dependency.id=foo)");
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
+                ".AddLocationInterceptor", configuration);
+
+        // Create the FooConsumer
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components.FooConsumer");
+
+        osgiHelper.waitForService(CheckService.class.getName(), null, 1000, true);
+        CheckService check = osgiHelper.getServiceObject(CheckService.class);
+        assertThat(check.check());
+        @SuppressWarnings("unchecked") Map<String, ?> props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+
+        // Create another provider
+        ComponentInstance provider2 = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
+                ".components.FooProvider");
+
+        check = osgiHelper.getServiceObject(CheckService.class);
+        assertThat(check.check());
+        props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+
+        // Provider 1 leaves
+        provider.dispose();
+
+        // The second provider is also transformed.
+        check = osgiHelper.getServiceObject(CheckService.class);
+        assertThat(check.check());
+        props = (Map<String, ?>) check.getProps().get("props");
+        assertThat(props.get("location")).isEqualTo("kitchen");
+        assertThat(props.get("hidden")).isNull();
+    }
+}
