@@ -621,7 +621,7 @@ public class Tracker implements TrackerCustomizer {
                         if (reference instanceof ServiceReferenceImpl) {
                             // Can't use the match(ref) as it throw a class cast exception on Equinox.
                             match = m_filter.match(((ServiceReferenceImpl) reference).getProperties());
-                        } else { // Non compute reference.
+                        } else { // Non computed reference.
                             match = m_filter.match(reference);
                         }
                         if (match) {
