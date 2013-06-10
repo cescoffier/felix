@@ -63,6 +63,13 @@
             <artifactId>org.osgi.compendium</artifactId>
             <version>4.2.0</version>
         </dependency>
+        <!-- We use the FilterImpl of Felix in tests -->
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.framework</artifactId>
+            <version>4.2.1</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.apache.felix</groupId>
             <artifactId>org.apache.felix.ipojo.metadata</artifactId>
