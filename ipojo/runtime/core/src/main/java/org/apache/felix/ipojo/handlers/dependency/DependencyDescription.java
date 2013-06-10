@@ -21,7 +21,6 @@ package org.apache.felix.ipojo.handlers.dependency;
 import java.util.Comparator;
 import java.util.List;
 
-import org.apache.felix.ipojo.dependency.impl.ServiceReferenceManager;
 import org.osgi.framework.Filter;
 import org.osgi.framework.ServiceReference;
 

@@ -174,7 +174,7 @@ public class DependencyHandlerDescription extends HandlerDescription {
             }
 
             if (m_dependencies[i].getDependency() != null) {
-                set = m_dependencies[i].getDependency().getServiceReferenceManager().getAllServices();
+                set = m_dependencies[i].getDependency().getServiceReferenceManager().getMatchingServices();
                 if (set != null) {
                     Iterator iterator = set.iterator();
                     while (iterator.hasNext()) {
