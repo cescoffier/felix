@@ -42,7 +42,7 @@ public class DependencyProperties {
         properties.put(Factory.INSTANCE_NAME_PROPERTY, dependency.getComponentInstance().getInstanceName());
         properties.put("instance.state", dependency.getComponentInstance().getState());
         properties.put("factory.name", dependency.getComponentInstance().getFactory().getFactoryName());
-        final Bundle bundle = dependency.getComponentInstance().getFactory().getBundleContext().getBundle();
+        final Bundle bundle = dependency.getBundleContext().getBundle();
         properties.put("bundle.symbolicName", bundle.getSymbolicName());
         if (bundle.getVersion() != null) {
             properties.put("bundle.version", bundle.getVersion().toString());
@@ -60,14 +60,17 @@ public class DependencyProperties {
         return properties;
     }
 
-    public static boolean match(ServiceReference reference, DependencyModel dependency) {
+    public static boolean match(ServiceReference reference, DependencyModel dependency, BundleContext context) {
         Object v = reference.getProperty(ServiceTrackingInterceptor.TARGET_PROPERTY);
         Filter filter = null;
+        if (v == null) {
+            return false; // Invalid interceptor
+        }
         if (v instanceof Filter) {
             filter = (Filter) v;
         } else if (v instanceof String) {
             try {
-                filter = dependency.getBundleContext().createFilter((String) v);
+                filter = context.createFilter((String) v);
             } catch (InvalidSyntaxException e) {
                 dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
                         "Cannot build filter from the target property : " + v, e);
@@ -79,6 +82,11 @@ public class DependencyProperties {
         }
 
         Dictionary<String, ?> properties = getDependencyProperties(dependency);
+
         return filter.match(properties);
+    }
+
+    public static boolean match(ServiceReference reference, DependencyModel dependency) {
+        return match(reference, dependency, dependency.getBundleContext());
     }
 }
