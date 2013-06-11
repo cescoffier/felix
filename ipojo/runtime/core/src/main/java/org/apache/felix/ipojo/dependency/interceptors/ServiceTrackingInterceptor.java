@@ -25,23 +25,15 @@ import org.osgi.framework.ServiceReference;
 
 /**
  * A service to influence the visibility of services within a service dependency.
- * Services that are already in the base service set (i.e. accepted) cannot be modified or filtered out.
+ * This service is called to determine which services from the tracker (base set) is going to the matching set.
+ *
+ * Several tracking interceptors can be plugged to the same service dependency. In this case,
+ * a chain is created where all interceptor can influence the next one. If the dependency has a filter,
+ * a tracking interceptor using this filter is the last interceptor of the chain.
+ *
+ * Obviously an interceptor can be plugged to several interceptors.
  */
-public interface ServiceTrackingInterceptor {
-
-    /**
-     * A mandatory property published by provider of this service.
-     * The value must be a LDAP filter. This filter will be confronted to the dependency property.
-     * @see org.osgi.framework.Filter
-     */
-    public static String TARGET_PROPERTY = "target";
-
-    /**
-     * The interceptor is plugged on a dependency.
-     * @param dependency the dependency
-     * @param context the context
-     */
-    public void open(DependencyModel dependency, BundleContext context);
+public interface ServiceTrackingInterceptor extends DependencyInterceptor {
 
     /**
      * Does the interceptor accepts the reference of not ?
@@ -66,25 +58,4 @@ public interface ServiceTrackingInterceptor {
     public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context,
                                                      TransformedServiceReference<S> ref);
 
-    /**
-     * The interceptor was unplugged from a dependency.
-     * @param dependency the dependency
-     * @param context the context
-     */
-    public void close(DependencyModel dependency, BundleContext context);
-
-    /**
-     * The service object of the given reference is required.
-     *
-     * This method let interceptors being notified of service object request and can modified the returned object.
-     *
-     * @param dependency the dependency
-     * @param service the original service object
-     * @param reference the service reference (potentially transformed)
-     * @param <S> the type of service
-     * @return the service object to return based on the given service object.
-     */
-    public <S> S getService(DependencyModel dependency, S service, ServiceReference<S> reference);
-
-    void ungetService(DependencyModel dependency, boolean noMoreUsage, ServiceReference reference);
 }

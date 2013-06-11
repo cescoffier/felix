@@ -37,7 +37,7 @@ public class FilterBasedServiceTrackingInterceptor implements ServiceTrackingInt
         m_filter = filter;
     }
 
-    public void open(DependencyModel dependency, BundleContext context) {
+    public void open(DependencyModel dependency) {
 
     }
 
@@ -49,7 +49,7 @@ public class FilterBasedServiceTrackingInterceptor implements ServiceTrackingInt
         }
     }
 
-    public void close(DependencyModel dependency, BundleContext context) {
+    public void close(DependencyModel dependency) {
 
     }
 

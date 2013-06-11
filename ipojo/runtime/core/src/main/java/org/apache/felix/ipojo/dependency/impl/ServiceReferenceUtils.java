@@ -53,10 +53,24 @@ public class ServiceReferenceUtils {
         return match;
     }
 
+    /**
+     * Checks whether a list of service references contains a reference with the same {@literal service.id} as the
+     * given reference.
+     * @param references the list of reference
+     * @param ref the reference
+     * @return {@literal true} if references contains a reference with the same service.id as ref.
+     */
     public static boolean containsReferenceById(List<? extends ServiceReference> references, ServiceReference ref) {
         return getServiceReferenceById(references, ref) != null;
     }
 
+    /**
+     * Gets a service reference with the same service.id as the given reference from the given list.
+     * @param references the list of references
+     * @param ref the reference
+     * @return the service reference from references having the same service.id as ref. {@literal null} if there is
+     * no such reference in the list.
+     */
     public static ServiceReference getServiceReferenceById(List<? extends ServiceReference> references,
                                                            ServiceReference ref) {
         Object id = ref.getProperty(Constants.SERVICE_ID);
@@ -68,7 +82,13 @@ public class ServiceReferenceUtils {
         return null;
     }
 
-    public static boolean areStrictlyEquals(ServiceReference ref1, ServiceReference ref2) {
+    /**
+     * Checks whether the two references has the same properties and their value are equals.
+     * @param ref1 first reference
+     * @param ref2 second reference
+     * @return {@literal true} if the two references have the same properties and their values are equals.
+     */
+    public static boolean haveSameProperties(ServiceReference ref1, ServiceReference ref2) {
         if (ref2 == null  && ref1 == null) {
             return true;
         }
@@ -94,8 +114,14 @@ public class ServiceReferenceUtils {
 
     }
 
-    public static boolean haveSameServiceId(ServiceReference oldBest, ServiceReference newFirst) {
-        return !(oldBest == null || newFirst == null)
-                && oldBest.getProperty(Constants.SERVICE_ID).equals(newFirst.getProperty(Constants.SERVICE_ID));
+    /**
+     * Checks whether two service references have the same service id.
+     * @param ref1 first reference
+     * @param ref2 second reference
+     * @return {@literal true} if the two references have the same service.id, {@literal false} otherwise.
+     */
+    public static boolean haveSameServiceId(ServiceReference ref1, ServiceReference ref2) {
+        return !(ref1 == null || ref2 == null)
+                && ref1.getProperty(Constants.SERVICE_ID).equals(ref2.getProperty(Constants.SERVICE_ID));
     }
 }

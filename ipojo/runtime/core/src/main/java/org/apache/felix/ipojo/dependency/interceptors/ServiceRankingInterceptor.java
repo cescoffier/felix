@@ -25,30 +25,55 @@ import org.osgi.framework.ServiceReference;
 import java.util.List;
 
 /**
- * A service to influence the sorting of services within a service dependency.
+ * A service to influence the sorting of services on a service dependency.
+ *
+ * Only one ranking interceptor can be plugged on a dependency, but an interceptor can handle several dependencies.
+ *
+ * This interceptors is called to compute the selected set of services from the matching set,
+ * i.e. the set of services that matching the filter (actually accepted by the tracking interceptors).
  */
-public interface ServiceRankingInterceptor {
+public interface ServiceRankingInterceptor extends DependencyInterceptor {
 
     /**
-     * A mandatory property published by provider of this service.
-     * The value must be a LDAP filter. This filter will be confronted to the dependency property.
-     *
-     * @see org.osgi.framework.Filter
+     * Gets the sorted set of selected reference.
+     * @param dependency the dependency
+     * @param matching the set of service to sort
+     * @return the sorted set of selected reference. This set is a sub-set potentially empty of the given list of
+     * references.
      */
-    public static String TARGET_PROPERTY = "target";
+    public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> matching);
 
-    public void open(DependencyModel dependency);
-
-    public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> all);
-
-    public List<ServiceReference> onServiceArrival(DependencyModel dependency, List<ServiceReference> all,
+    /**
+     * A new service arrives in the matching set. This method is called to retrieve the new sorted set of selected
+     * services.
+     * @param dependency the dependency
+     * @param matching the set of matching service
+     * @param reference the arriving reference
+     * @return the new sorted set of service
+     */
+    public List<ServiceReference> onServiceArrival(DependencyModel dependency, List<ServiceReference> matching,
                                                    ServiceReference<?> reference);
 
-    public List<ServiceReference> onServiceDeparture(DependencyModel dependency, List<ServiceReference> all,
+    /**
+     * A service leaves the matching set. This method is called to retrieve the new sorted set of selected
+     * services.
+     * @param dependency the dependency
+     * @param matching the set of matching service
+     * @param reference the leaving reference
+     * @return the new sorted set of service
+     */
+    public List<ServiceReference> onServiceDeparture(DependencyModel dependency, List<ServiceReference> matching,
                                                      ServiceReference<?> reference);
 
-    public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> all,
+    /**
+     * A service from the matching set was modified. This method is called to retrieve the new sorted set of selected
+     * services.
+     * @param dependency the dependency
+     * @param matching the set of matching service
+     * @param reference the modified service
+     * @return the new sorted set of service
+     */
+    public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> matching,
                                               ServiceReference<?> reference);
 
-    public void close(DependencyModel dependency);
 }

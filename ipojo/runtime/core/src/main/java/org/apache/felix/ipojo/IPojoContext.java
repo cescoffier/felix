@@ -274,7 +274,7 @@ public class IPojoContext implements BundleContext, ServiceContext {
     public <S> S getService(ServiceReference<S> ref) {
         //TODO Move this somewhere else
         if (ref instanceof TransformedServiceReference) {
-            ref = ((TransformedServiceReference<S>) ref).getInitialReference();
+            ref = ((TransformedServiceReference<S>) ref).getWrappedReference();
         }
         if (m_serviceContext == null) {
             return m_bundleContext.getService(ref);
@@ -481,7 +481,7 @@ public class IPojoContext implements BundleContext, ServiceContext {
     public boolean ungetService(ServiceReference reference) {
         //TODO Move this somewhere else
         if (reference instanceof TransformedServiceReference) {
-            reference = ((TransformedServiceReference) reference).getInitialReference();
+            reference = ((TransformedServiceReference) reference).getWrappedReference();
         }
         if (m_serviceContext == null) {
             return m_bundleContext.ungetService(reference);

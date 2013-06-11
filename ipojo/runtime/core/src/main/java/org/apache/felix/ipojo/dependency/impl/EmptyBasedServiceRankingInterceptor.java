@@ -35,21 +35,21 @@ public class EmptyBasedServiceRankingInterceptor implements ServiceRankingInterc
 
     public void open(DependencyModel dependency) { }
 
-    public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> all) {
-        return all;
+    public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> matching) {
+        return matching;
     }
 
-    public List<ServiceReference> onServiceArrival(DependencyModel dependency, List<ServiceReference> all, ServiceReference<?> reference) {
-        return getServiceReferences(dependency, all);
+    public List<ServiceReference> onServiceArrival(DependencyModel dependency, List<ServiceReference> matching, ServiceReference<?> reference) {
+        return getServiceReferences(dependency, matching);
     }
 
-    public List<ServiceReference> onServiceDeparture(DependencyModel dependency, List<ServiceReference> all,
+    public List<ServiceReference> onServiceDeparture(DependencyModel dependency, List<ServiceReference> matching,
                                                      ServiceReference<?> reference) {
-        return getServiceReferences(dependency, all);
+        return getServiceReferences(dependency, matching);
     }
 
-    public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> all, ServiceReference<?> reference) {
-        return getServiceReferences(dependency, all);
+    public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> matching, ServiceReference<?> reference) {
+        return getServiceReferences(dependency, matching);
     }
 
     public void close(DependencyModel dependency) {  }

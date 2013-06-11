@@ -60,6 +60,13 @@ public class DependencyProperties {
         return properties;
     }
 
+    /**
+     * Checks that the 'target' property of the service reference matches the dependency.
+     * @param reference the reference
+     * @param dependency the dependency
+     * @param context a bundle context used to build the filter
+     * @return {@literal true} if the target's property of reference matches the dependency.
+     */
     public static boolean match(ServiceReference reference, DependencyModel dependency, BundleContext context) {
         Object v = reference.getProperty(ServiceTrackingInterceptor.TARGET_PROPERTY);
         Filter filter = null;

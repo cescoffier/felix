@@ -45,7 +45,7 @@ public class AddLocationInterceptor extends DefaultServiceTrackingInterceptor {
 
 
     @Override
-    public void open(DependencyModel dependency, BundleContext context) {
+    public void open(DependencyModel dependency) {
         System.out.println("open called for " + dependency.getId());
         dependencies.add(dependency);
     }
@@ -60,7 +60,7 @@ public class AddLocationInterceptor extends DefaultServiceTrackingInterceptor {
     }
 
     @Override
-    public void close(DependencyModel dependency, BundleContext context) {
+    public void close(DependencyModel dependency) {
         dependencies.remove(dependency);
     }
 }

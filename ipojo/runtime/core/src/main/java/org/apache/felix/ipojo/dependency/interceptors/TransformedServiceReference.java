@@ -27,7 +27,9 @@ import org.osgi.framework.ServiceReference;
 import java.util.*;
 
 /**
- * Transformed service reference is an interface letting updating the properties of a service preference.
+ * Transformed service reference is an interface letting updating the properties of a service reference.
+ *
+ * Transformed service reference wraps a <i>real</i> service reference and has all its properties.
  */
 public interface TransformedServiceReference<S> extends ServiceReference<S> {
 
@@ -41,15 +43,46 @@ public interface TransformedServiceReference<S> extends ServiceReference<S> {
     );
 
 
+    /**
+     * Adds a property to the reference
+     * @param name the property name
+     * @param value the value (must not be null)
+     * @return the current transformed service reference
+     */
     public TransformedServiceReference<S> addProperty(String name, Object value);
 
+    /**
+     * Adds a property to the service reference if this property is not already set on the reference.
+     * @param name the property name
+     * @param value the value
+     * @return the current transformed service reference
+     */
     public TransformedServiceReference<S> addPropertyIfAbsent(String name, Object value);
 
+    /**
+     * Gets the current value of a property.
+     * @param name the property name
+     * @return the current value of the property, {@literal null} if not in the properties.
+     */
     public Object get(String name);
 
+    /**
+     * Removes a property from the reference.
+     * @param name the property name
+     * @return the current transformed service reference
+     */
     public TransformedServiceReference<S> removeProperty(String name);
 
+    /**
+     * Does the service reference contains the given property ?
+     * @param name the property name
+     * @return whether the current reference contains a property with the given name
+     */
     public boolean contains(String name);
 
-    public ServiceReference<S> getInitialReference();
+    /**
+     * Gets the wrapped service reference
+     * @return the wrapped service reference
+     */
+    public ServiceReference<S> getWrappedReference();
 }

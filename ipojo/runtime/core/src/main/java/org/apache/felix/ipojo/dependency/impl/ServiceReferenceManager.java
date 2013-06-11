@@ -195,14 +195,14 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         // A new interceptor arrives. Insert it at the beginning of the list.
         // TODO Locking.
         m_trackingInterceptors.addFirst(interceptor);
-        interceptor.open(m_dependency, m_dependency.getBundleContext());
+        interceptor.open(m_dependency);
         m_dependency.onChange(fireBaseSetChanges());
     }
 
     private void removeTrackingInterceptor(ServiceTrackingInterceptor interceptor) {
         // TODO Locking
         m_trackingInterceptors.remove(interceptor);
-        interceptor.close(m_dependency, m_dependency.getBundleContext());
+        interceptor.close(m_dependency);
         m_dependency.onChange(fireBaseSetChanges());
     }
 
@@ -250,7 +250,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                 ServiceReference newFirst = getFirstService();
                 ServiceReference modified = null;
                 if (ServiceReferenceUtils.haveSameServiceId(oldBest, newFirst)  && ServiceReferenceUtils
-                        .areStrictlyEquals(oldBest, newFirst)) {
+                        .haveSameProperties(oldBest, newFirst)) {
                     modified = newFirst;
                 }
 
@@ -306,7 +306,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
             m_dependency.acquireWriteLockIfNotHeld();
             m_rankingInterceptor.close(m_dependency);
             for (ServiceTrackingInterceptor interceptor : m_trackingInterceptors) {
-                interceptor.close(m_dependency, m_dependency.getBundleContext());
+                interceptor.close(m_dependency);
             }
             m_trackingInterceptors.clear();
             m_matchingReferences.clear();
@@ -483,7 +483,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                 onDepartureOfAMatchingService(initial, service);
             }  else {
                 // Do we have a real change
-                if (! ServiceReferenceUtils.areStrictlyEquals(initial, accepted)) {
+                if (! ServiceReferenceUtils.haveSameProperties(initial, accepted)) {
                     // case 3
                     m_matchingReferences.put(reference, accepted);
                     onModificationOfAMatchingService(accepted, service);

@@ -178,7 +178,7 @@ public class PolicyServiceContext implements ServiceContext {
      */
     public Object getService(ServiceReference ref) {
         if (ref instanceof TransformedServiceReference) {
-            ref = ((TransformedServiceReference) ref).getInitialReference();
+            ref = ((TransformedServiceReference) ref).getWrappedReference();
         }
         switch(m_policy) { // NOPMD No break needed as we return in each branch.
             case LOCAL:

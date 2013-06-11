@@ -35,7 +35,7 @@ public class DefaultServiceTrackingInterceptor implements  ServiceTrackingInterc
 
     protected List<DependencyModel> dependencies = new ArrayList<DependencyModel>();
 
-    public void open(DependencyModel dependency, BundleContext context) {
+    public void open(DependencyModel dependency) {
         synchronized (this) {
             dependencies.add(dependency);
         }
@@ -45,7 +45,7 @@ public class DefaultServiceTrackingInterceptor implements  ServiceTrackingInterc
         return  ref;
     }
 
-    public void close(DependencyModel dependency, BundleContext context) {
+    public void close(DependencyModel dependency) {
         synchronized (this) {
             dependencies.remove(dependency);
         }

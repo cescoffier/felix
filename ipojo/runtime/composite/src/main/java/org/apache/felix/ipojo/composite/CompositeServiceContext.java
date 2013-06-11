@@ -161,7 +161,7 @@ public class CompositeServiceContext implements ServiceContext, TrackerCustomize
     public Object getService(ServiceReference arg0) {
         ServiceReference ref;
         if (arg0 instanceof TransformedServiceReference) {
-            ref = ((TransformedServiceReference) arg0).getInitialReference();
+            ref = ((TransformedServiceReference) arg0).getWrappedReference();
         } else {
             ref = arg0;
         }

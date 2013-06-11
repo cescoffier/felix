@@ -27,7 +27,7 @@ import org.osgi.framework.ServiceReference;
 import java.util.*;
 
 /**
- * Builds service reference objects
+ * Implements transformed service reference.
  */
 public class TransformedServiceReferenceImpl<S> implements TransformedServiceReference<S> {
 
@@ -71,12 +71,12 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
     }
 
     public boolean contains(String name) {
-        return m_properties.containsKey(name);
+        return m_properties.get(name) != null;
     }
 
-    public ServiceReference<S> getInitialReference() {
+    public ServiceReference<S> getWrappedReference() {
         if (m_origin instanceof TransformedServiceReferenceImpl) {
-            return ((TransformedServiceReferenceImpl<S>) m_origin).getInitialReference();
+            return ((TransformedServiceReferenceImpl<S>) m_origin).getWrappedReference();
         } else {
             return m_origin;
         }
@@ -154,12 +154,11 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
 
     @Override
     public int hashCode() {
-        //TODO incorrect according to the equals.
         return m_origin.hashCode();
     }
 
     @Override
     public String toString() {
-        return getInitialReference().toString() + m_properties;
+        return getWrappedReference().toString() + m_properties;
     }
 }
