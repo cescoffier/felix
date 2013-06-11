@@ -53,7 +53,7 @@ public interface ServiceTrackingInterceptor {
      * So to filter out the service, return {@literal null}. To accept the service,
      * return the reference as it is. To transform the service update the service reference and return it.
      *
-     * When several interceptors are collaborating on teh same dependency, a chain is created. The received reference
+     * When several interceptors are collaborating on the same dependency, a chain is created. The received reference
      * is the reference modified by the preceding interceptor. Notice that once an interceptor returns {@literal
      * null} the chain is interrupted and the service rejected.
      *

@@ -46,6 +46,17 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
         return this;
     }
 
+    public TransformedServiceReference<S> addPropertyIfAbsent(String name, Object value) {
+        if (! contains(name)) {
+            addProperty(name, value);
+        }
+        return this;
+    }
+
+    public Object get(String name) {
+        return getAllProperties().get(name);
+    }
+
     public TransformedServiceReferenceImpl<S> removeProperty(String name) {
         if (FORBIDDEN_KEYS.contains(name)) {
             throw new IllegalArgumentException("Cannot change the property " + name);
@@ -53,6 +64,10 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
         // Store a null value.
         m_properties.put(name, null);
         return this;
+    }
+
+    public boolean contains(String name) {
+        return getAllProperties().containsKey(name);
     }
 
     public ServiceReference<S> getInitialReference() {
@@ -142,14 +157,17 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
 
     @Override
     public boolean equals(Object o) {
-        if (o instanceof TransformedServiceReference) {
-            return m_origin.equals(((TransformedServiceReference) o).getInitialReference());
+        if (o instanceof ServiceReference) {
+            Object id1 = ((ServiceReference) o).getProperty(Constants.SERVICE_ID);
+            Object id2 = this.getProperty(Constants.SERVICE_ID);
+            return id1 == id2;
         }
         return m_origin.equals(o);
     }
 
     @Override
     public int hashCode() {
+        //TODO incorrect according to the equals.
         return m_origin.hashCode();
     }
 

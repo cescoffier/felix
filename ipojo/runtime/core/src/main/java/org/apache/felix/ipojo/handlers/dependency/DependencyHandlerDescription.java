@@ -143,12 +143,10 @@ public class DependencyHandlerDescription extends HandlerDescription {
             }
             
             dep.addAttribute(new Attribute("State", state));
-            List set = m_dependencies[i].getUsedServices();
+            List<ServiceReference> set = m_dependencies[i].getUsedServices();
             if (set != null) {
-                Iterator iterator = set.iterator();
-                while (iterator.hasNext()) {
+                for (ServiceReference ref : set) {
                     Element use = new Element("Uses", "");
-                    ServiceReference ref = (ServiceReference) iterator.next();
                     use.addAttribute(new Attribute(Constants.SERVICE_ID, ref.getProperty(Constants.SERVICE_ID).toString()));
                     String instance = (String) ref.getProperty(Factory.INSTANCE_NAME_PROPERTY);
                     if (instance != null) {
@@ -160,10 +158,8 @@ public class DependencyHandlerDescription extends HandlerDescription {
 
             set = m_dependencies[i].getServiceReferences();
             if (set != null) {
-                Iterator iterator = set.iterator();
-                while (iterator.hasNext()) {
+                for (ServiceReference ref : set) {
                     Element use = new Element("Selected", "");
-                    ServiceReference ref = (ServiceReference) iterator.next();
                     use.addAttribute(new Attribute(Constants.SERVICE_ID, ref.getProperty(Constants.SERVICE_ID).toString()));
                     String instance = (String) ref.getProperty(Factory.INSTANCE_NAME_PROPERTY);
                     if (instance != null) {
@@ -176,10 +172,8 @@ public class DependencyHandlerDescription extends HandlerDescription {
             if (m_dependencies[i].getDependency() != null) {
                 set = m_dependencies[i].getDependency().getServiceReferenceManager().getMatchingServices();
                 if (set != null) {
-                    Iterator iterator = set.iterator();
-                    while (iterator.hasNext()) {
+                    for (ServiceReference ref : set) {
                         Element use = new Element("Matches", "");
-                        ServiceReference ref = (ServiceReference) iterator.next();
                         use.addAttribute(new Attribute(Constants.SERVICE_ID, ref.getProperty(Constants.SERVICE_ID).toString()));
                         String instance = (String) ref.getProperty(Factory.INSTANCE_NAME_PROPERTY);
                         if (instance != null) {
@@ -189,7 +183,7 @@ public class DependencyHandlerDescription extends HandlerDescription {
                     }
                 }
             }
-            
+
             deps.addElement(dep);
         }
         return deps;

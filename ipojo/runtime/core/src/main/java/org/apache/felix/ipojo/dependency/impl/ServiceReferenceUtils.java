@@ -52,11 +52,12 @@ public class ServiceReferenceUtils {
         return match;
     }
 
-    public static boolean containsReferenceById(List<ServiceReference> references, ServiceReference ref) {
+    public static boolean containsReferenceById(List<? extends ServiceReference> references, ServiceReference ref) {
         return getServiceReferenceById(references, ref) != null;
     }
 
-    public static ServiceReference getServiceReferenceById(List<ServiceReference> references, ServiceReference ref) {
+    public static ServiceReference getServiceReferenceById(List<? extends ServiceReference> references,
+                                                           ServiceReference ref) {
         Object id = ref.getProperty(Constants.SERVICE_ID);
         for (ServiceReference reference : references) {
             if (reference.getProperty(Constants.SERVICE_ID).equals(id)) {
@@ -66,7 +67,8 @@ public class ServiceReferenceUtils {
         return null;
     }
 
-    public static int getIndexOfServiceReferenceById(List<ServiceReference> references, ServiceReference ref) {
+    public static int getIndexOfServiceReferenceById(List<? extends ServiceReference> references,
+                                                     ServiceReference ref) {
         Object id = ref.getProperty(Constants.SERVICE_ID);
         int index = 0;
         for (ServiceReference reference : references) {
@@ -111,5 +113,10 @@ public class ServiceReferenceUtils {
         return true;
 
 
+    }
+
+    public static boolean haveSameServiceId(ServiceReference oldBest, ServiceReference newFirst) {
+        return !(oldBest == null || newFirst == null)
+                && oldBest.getProperty(Constants.SERVICE_ID).equals(newFirst.getProperty(Constants.SERVICE_ID));
     }
 }

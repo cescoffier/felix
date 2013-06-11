@@ -19,14 +19,10 @@
 
 package org.apache.felix.ipojo.runtime.core.test.services;
 
-import java.util.Properties;
+/**
+ * A simple interface to set a property.
+ */
+public interface Setter {
 
-public interface CheckService {
-    
-    public static final String foo = "foo";
-	
-	public boolean check();
-	
-	public Properties getProps();
-
+    public void set(String newValue);
 }

@@ -21,6 +21,8 @@ package org.apache.felix.ipojo.dependency.impl;
 
 import org.apache.felix.ipojo.Factory;
 import org.apache.felix.ipojo.dependency.interceptors.ServiceRankingInterceptor;
+import org.apache.felix.ipojo.dependency.interceptors.ServiceTrackingInterceptor;
+import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.apache.felix.ipojo.util.Log;
 import org.apache.felix.ipojo.util.Tracker;
@@ -29,10 +31,7 @@ import org.osgi.framework.Constants;
 import org.osgi.framework.Filter;
 import org.osgi.framework.ServiceReference;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 
 /**
  * This class is handling the transformations between the base service set and the selected service set.
@@ -46,14 +45,6 @@ public class SelectedServicesManager implements TrackerCustomizer {
      */
     private final DependencyModel m_dependency;
     /**
-     * The list of all matching service references. This list is a
-     * subset of tracked references. This set is computed according
-     * to the filter and the {@link DependencyModel#match(ServiceReference)} method.
-     *
-     * This is an array list to ease replacement of references due to reference transformation.
-     */
-    private final ArrayList<ServiceReference> m_matchingReferences = new ArrayList<ServiceReference>();
-    /**
      * The comparator to sort service references.
      */
     private Comparator<ServiceReference> m_comparator;
@@ -62,18 +53,36 @@ public class SelectedServicesManager implements TrackerCustomizer {
      * from the set of providers providing the required specification.
      */
     private Filter m_filter;
+
+    /**
+     * The list of all matching service references. This list is a
+     * subset of tracked references. This set is computed according
+     * to the filter and the {@link DependencyModel#match(ServiceReference)} method.
+     */
+    private final Map<ServiceReference, TransformedServiceReference> m_matchingReferences = new
+            LinkedHashMap<ServiceReference, TransformedServiceReference>();
+
     /**
      * The list of selected service references.
      */
-    private List<ServiceReference> m_selectedReferences = new ArrayList<ServiceReference>();
+    private List<? extends ServiceReference> m_selectedReferences = new ArrayList<ServiceReference>();
     /**
      * The service ranking interceptor.
      */
-    private ServiceRankingInterceptor m_interceptor;
+    private ServiceRankingInterceptor m_rankingInterceptor;
     /**
      * Service interceptor tracker.
      */
-    private Tracker m_tracker;
+    private Tracker m_rankingInterceptorTracker;
+    private Tracker m_trackingInterceptorTracker;
+
+    /**
+     * The set of tracking interceptors.
+     * TODO this set should be ranking according to the OSGi ranking policy.
+     * The filter is always the last interceptor.
+     */
+    private LinkedList<ServiceTrackingInterceptor> m_trackingInterceptors = new
+            LinkedList<ServiceTrackingInterceptor>();
 
     /**
      * Creates the service reference manager.
@@ -85,17 +94,20 @@ public class SelectedServicesManager implements TrackerCustomizer {
     public SelectedServicesManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
         m_dependency = dep;
         m_filter = filter;
+        if (m_filter != null) {
+            m_trackingInterceptors.addLast(new FilterBasedServiceTrackingInterceptor(m_filter));
+        }
         if (comparator != null) {
             m_comparator = comparator;
-            m_interceptor = new ComparatorBasedServiceRankingInterceptor(comparator);
+            m_rankingInterceptor = new ComparatorBasedServiceRankingInterceptor(comparator);
         } else {
-            m_interceptor = new EmptyBasedServiceRankingInterceptor();
+            m_rankingInterceptor = new EmptyBasedServiceRankingInterceptor();
         }
     }
 
     public void open() {
-        // Initialize the service interceptor tracker.
-        m_tracker = new Tracker(m_dependency.getBundleContext(), ServiceRankingInterceptor.class.getName(),
+        m_trackingInterceptorTracker = new Tracker(m_dependency.getBundleContext(),
+                ServiceTrackingInterceptor.class.getName(),
                 new TrackerCustomizer() {
 
                     public boolean addingService(ServiceReference reference) {
@@ -103,14 +115,11 @@ public class SelectedServicesManager implements TrackerCustomizer {
                     }
 
                     public void addedService(ServiceReference reference) {
-                        ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_tracker
+                        ServiceTrackingInterceptor interceptor = (ServiceTrackingInterceptor) m_trackingInterceptorTracker
                                 .getService(reference);
-                        Object o = m_dependency.getBundleContext().getService(reference);
-                        m_dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
-                                "o ? " + o);
 
                         if (interceptor != null) {
-                            setInterceptor(interceptor);
+                            addTrackingInterceptor(interceptor);
                         } else {
                             m_dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
                                     "Cannot retrieve the interceptor object from service reference " + reference
@@ -125,32 +134,139 @@ public class SelectedServicesManager implements TrackerCustomizer {
                     }
 
                     public void removedService(ServiceReference reference, Object service) {
-                        if (service == m_interceptor) {
-                            m_interceptor.close(m_dependency);
+                        if (service != null && m_trackingInterceptors.contains(service)) {
+                            removeTrackingInterceptor((ServiceTrackingInterceptor) service);
+                        }
+                    }
+                });
+
+        m_trackingInterceptorTracker.open();
+
+        // Initialize the service interceptor tracker.
+        m_rankingInterceptorTracker = new Tracker(m_dependency.getBundleContext(), ServiceRankingInterceptor.class.getName(),
+                new TrackerCustomizer() {
+
+                    public boolean addingService(ServiceReference reference) {
+                        return DependencyProperties.match(reference, m_dependency);
+                    }
+
+                    public void addedService(ServiceReference reference) {
+                        ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_rankingInterceptorTracker
+                                .getService(reference);
+                        if (interceptor != null) {
+                            setRankingInterceptor(interceptor);
+                        } else {
+                            m_dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
+                                    "Cannot retrieve the interceptor object from service reference " + reference
+                                            .getProperty(Constants.SERVICE_ID) + " - " + reference.getProperty
+                                            (Factory.INSTANCE_NAME_PROPERTY));
+                        }
+                    }
+
+                    public void modifiedService(ServiceReference reference, Object service) {
+                        // Not supported yet.
+                        // TODO it would be nice to support the modification of the interceptor TARGET property.
+                    }
+
+                    public void removedService(ServiceReference reference, Object service) {
+                        if (service == m_rankingInterceptor) {
+                            m_rankingInterceptor.close(m_dependency);
                             // Do we have another one ?
-                            ServiceReference anotherReference = m_tracker.getServiceReference();
+                            ServiceReference anotherReference = m_rankingInterceptorTracker.getServiceReference();
                             if (anotherReference != null) {
-                                ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_tracker
+                                ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_rankingInterceptorTracker
                                         .getService(anotherReference);
-                                if (interceptor != null) setInterceptor(interceptor);
+                                if (interceptor != null) setRankingInterceptor(interceptor);
                             } else if (m_comparator != null) {
                                 // If we have a comparator, we restore the comparator.
                                 setComparator(m_comparator);
                             } else {
                                 // If we have neither comparator nor interceptor use an empty interceptor.
-                                setInterceptor(new EmptyBasedServiceRankingInterceptor());
+                                setRankingInterceptor(new EmptyBasedServiceRankingInterceptor());
                             }
                         }
                     }
                 });
 
-        m_tracker.open();
+        m_rankingInterceptorTracker.open();
+    }
+
+    private void addTrackingInterceptor(ServiceTrackingInterceptor interceptor) {
+        // A new interceptor arrives. Insert it at the beginning of the list.
+        // TODO Locking.
+        System.out.println("Adding interceptor to " + m_dependency + " for " + m_dependency.getComponentInstance().getInstanceName());
+        m_trackingInterceptors.addFirst(interceptor);
+        interceptor.open(m_dependency, m_dependency.getBundleContext());
+        m_dependency.onChange(fireBaseSetChanges());
+    }
+
+    private void removeTrackingInterceptor(ServiceTrackingInterceptor interceptor) {
+        // TODO Locking
+        m_trackingInterceptors.remove(interceptor);
+        interceptor.close(m_dependency, m_dependency.getBundleContext());
+        m_dependency.onChange(fireBaseSetChanges());
+    }
+
+    private ChangeSet fireBaseSetChanges() {
+        if (m_dependency.getTracker()  == null  || m_dependency.getTracker().getServiceReferences() == null) {
+            // Tracker closed, no problem
+            return new ChangeSet(Collections.<ServiceReference>emptyList(),
+                    Collections.<ServiceReference>emptyList(),
+                    Collections.<ServiceReference>emptyList(),
+                    null,
+                    null,
+                    null,
+                    null);
+        }
+        // The set of interceptor has changed.
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
+            // The tracker is open, we must recheck all services.
+            ServiceReference oldBest = getFirstService();
+                // Recompute the matching services.
+                m_matchingReferences.clear();
+                for (ServiceReference reference : m_dependency.getTracker().getServiceReferencesList()) {
+                    TransformedServiceReference ref = new TransformedServiceReferenceImpl(reference);
+                    ref = accept(ref);
+                    if (ref != null) {
+                        m_matchingReferences.put(reference, ref);
+                    }
+                }
+
+                // We have the new matching set.
+
+                List<ServiceReference> beforeRanking = getSelectedServices();
+
+                final List<ServiceReference> allServices = getMatchingServices();
+                List<ServiceReference> references;
+                if (allServices.isEmpty()) {
+                    references = Collections.emptyList();
+                } else {
+                    references = m_rankingInterceptor.getServiceReferences(m_dependency, allServices);
+                }
+
+                RankingResult result = computeDifferences(beforeRanking, references);
+                m_selectedReferences = result.selected;
+
+                ServiceReference newFirst = getFirstService();
+                ServiceReference modified = null;
+                if (ServiceReferenceUtils.haveSameServiceId(oldBest, newFirst)  && ServiceReferenceUtils
+                        .areStrictlyEquals(oldBest, newFirst)) {
+                    modified = newFirst;
+                }
+
+
+                return new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest, getFirstService(),
+                        null, modified);
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
+        }
     }
 
     public List<ServiceReference> getMatchingServices() {
         try {
             m_dependency.acquireReadLockIfNotHeld();
-            return new ArrayList<ServiceReference>(m_matchingReferences);
+            return new ArrayList<ServiceReference>(m_matchingReferences.values());
         } finally {
             m_dependency.releaseReadLockIfHeld();
         }
@@ -187,27 +303,16 @@ public class SelectedServicesManager implements TrackerCustomizer {
         }
     }
 
-    /**
-     * Checks whether the matching set contains a reference with the same service.id as the given reference.
-     * @param ref the reference
-     * @return {@literal true} if the matching service set contains a reference with the same id as the given
-     * reference, {@literal false} otherwise
-     */
-    public boolean matchingContainsReferenceById(ServiceReference ref) {
-        try {
-            m_dependency.acquireReadLockIfNotHeld();
-            return ServiceReferenceUtils.containsReferenceById(m_matchingReferences, ref);
-        } finally {
-            m_dependency.releaseReadLockIfHeld();
-        }
-
-    }
-
     public void reset() {
         try {
             m_dependency.acquireWriteLockIfNotHeld();
+            m_rankingInterceptor.close(m_dependency);
+            for (ServiceTrackingInterceptor interceptor : m_trackingInterceptors) {
+                interceptor.close(m_dependency, m_dependency.getBundleContext());
+            }
+            m_trackingInterceptors.clear();
             m_matchingReferences.clear();
-            m_selectedReferences = new ArrayList<ServiceReference>();
+            m_selectedReferences = new ArrayList<TransformedServiceReference>();
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }
@@ -215,6 +320,8 @@ public class SelectedServicesManager implements TrackerCustomizer {
     }
 
     public boolean addingService(ServiceReference reference) {
+        // We accept all service references except if we are frozen or broken. In these case, just ignore everything.
+
         // We are doing two tests, we must get the read lock
         try {
             m_dependency.acquireReadLockIfNotHeld();
@@ -224,37 +331,57 @@ public class SelectedServicesManager implements TrackerCustomizer {
         }
     }
 
+    private <S> TransformedServiceReference<S> accept(TransformedServiceReference<S> reference) {
+        TransformedServiceReference<S> accumulator = reference;
+        for (ServiceTrackingInterceptor interceptor : m_trackingInterceptors) {
+            TransformedServiceReference<S> accepted = interceptor.accept(m_dependency, m_dependency.getBundleContext(), reference);
+            if (accepted != null) {
+                accumulator = accepted;
+            } else {
+                // refused by an interceptor
+                m_dependency.getComponentInstance().getFactory().getLogger().log(Log.INFO,
+                        "The service reference " + reference.getProperty(Constants.SERVICE_ID) + " was rejected by " +
+                                "interceptor " + interceptor);
+                return null;
+            }
+        }
+
+        return accumulator;
+    }
+
     public void addedService(ServiceReference reference) {
+        // A service was added to the tracker.
+
+        // First, check is the tracking interceptors are accepting it.
+        // The transformed reference is creates and check outside of the protected region.
+        TransformedServiceReference ref = new TransformedServiceReferenceImpl(reference);
+
         boolean match;
         try {
             m_dependency.acquireReadLockIfNotHeld();
-            match = ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference) && !matchingContainsReferenceById(reference);
+            ref = accept(ref);
+            if (ref != null) {
+                m_matchingReferences.put(reference, ref);
+            }
+            match = ref != null;
         } finally {
             m_dependency.releaseReadLockIfHeld();
         }
+
         if (match) {
             // Callback invoked outside of locks.
             // The called method is taking the write lock anyway.
-            onNewMatchingService(reference);
+            onNewMatchingService(ref);
         }
     }
 
-    private void onNewMatchingService(ServiceReference reference) {
+    private void onNewMatchingService(TransformedServiceReference reference) {
         ServiceReference oldFirst;
         RankingResult result;
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
-
-            // We add the reference to the matching list.
-            // If we already have a reference with the same id, replace it.
-            int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
-            if (currentIndex == -1) {
-                m_matchingReferences.add(reference);
-            } else {
-                m_matchingReferences.set(currentIndex, reference);
-            }
 
             // We apply our ranking strategy.
             result = applyRankingOnArrival(reference);
@@ -268,22 +395,13 @@ public class SelectedServicesManager implements TrackerCustomizer {
                 getFirstService(), null, null);
     }
 
-    private void onModificationOfAMatchingService(ServiceReference reference, Object service) {
+    private void onModificationOfAMatchingService(TransformedServiceReference reference, Object service) {
         ServiceReference oldFirst;
         RankingResult result;
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
-
-            // We add the reference to the matching list if not there yet.
-            // If we already have a reference with the same id, replace it.
-            int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
-            if (currentIndex == -1) {
-                m_matchingReferences.add(reference);
-            } else {
-                m_matchingReferences.set(currentIndex, reference);
-            }
 
             // We apply our ranking strategy.
             result = applyRankingOnModification(reference);
@@ -300,7 +418,7 @@ public class SelectedServicesManager implements TrackerCustomizer {
     private RankingResult applyRankingOnModification(ServiceReference reference) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceModified(m_dependency, getMatchingServices(),
+        List<ServiceReference> references = m_rankingInterceptor.onServiceModified(m_dependency, getMatchingServices(),
                 reference);
         return computeDifferences(beforeRanking, references);
     }
@@ -315,7 +433,7 @@ public class SelectedServicesManager implements TrackerCustomizer {
     private RankingResult applyRankingOnArrival(ServiceReference ref) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceArrival(m_dependency, getMatchingServices(),
+        List<ServiceReference> references = m_rankingInterceptor.onServiceArrival(m_dependency, getMatchingServices(),
                 ref);
         // compute the differences
         return computeDifferences(beforeRanking, references);
@@ -325,7 +443,7 @@ public class SelectedServicesManager implements TrackerCustomizer {
     private RankingResult applyRankingOnDeparture(ServiceReference ref) {
         // TODO we are holding the lock here.
         List<ServiceReference> beforeRanking = getSelectedServices();
-        List<ServiceReference> references = m_interceptor.onServiceDeparture(m_dependency, getMatchingServices(),
+        List<ServiceReference> references = m_rankingInterceptor.onServiceDeparture(m_dependency, getMatchingServices(),
                 ref);
         return computeDifferences(beforeRanking, references);
     }
@@ -351,76 +469,71 @@ public class SelectedServicesManager implements TrackerCustomizer {
     }
 
     public void modifiedService(ServiceReference reference, Object service) {
-        System.out.println("modification of " + reference);
         // We are handling a modified event, we have three case to handle
-        // 1) the service was matching and does not march anymore -> it's a departure.
+        // 1) the service was matching and does not match anymore -> it's a departure.
         // 2) the service was not matching and matches -> it's an arrival
         // 3) the service was matching and still matches -> it's a modification.
 
-        if (matchingContainsReferenceById(reference)) {
-            // Either case 1 or 3
-            if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
-                // Case 3
-                // We need to re-apply ranking.
-                System.out.println("case 3");
-                onModificationOfAMatchingService(reference, service);
-            } else {
-                // Case 1
-                System.out.println("case 1");
-                removedService(reference, service);
-            }
-        } else {
-            if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
-                // Case 2
-                System.out.println("case 2");
-                onNewMatchingService(reference);
-            }
-        }
-    }
-
-    /**
-     * Removes a service reference from the matching set. The reference is identified using the service.id property.
-     * @param ref the reference
-     * @return {@literal true} if the service reference was found and removed.
-     */
-    private boolean removeMatchingReferenceById(ServiceReference ref) {
-        try {
-            Object id = ref.getProperty(Constants.SERVICE_ID);
-            m_dependency.acquireWriteLockIfNotHeld();
-            for (ServiceReference reference : m_matchingReferences) {
-                if (reference.getProperty(Constants.SERVICE_ID).equals(id)) {
-                    return m_matchingReferences.remove(reference);
+        if (m_matchingReferences.containsKey(reference)) {
+            // do we still accept the reference
+            TransformedServiceReference initial = m_matchingReferences.get(reference);
+            TransformedServiceReference transformed = new TransformedServiceReferenceImpl(reference);
+            transformed = accept(transformed);
+            if (transformed == null) {
+                // case 1
+                m_matchingReferences.remove(reference);
+                onDepartureOfAMatchingService(initial, service);
+            }  else {
+                // Do we have a real change
+                if (! ServiceReferenceUtils.areStrictlyEquals(initial, transformed)) {
+                    // case 3
+                    m_matchingReferences.put(reference, transformed);
+                    onModificationOfAMatchingService(transformed, service);
                 }
             }
-            return false; // Not found.
-        } finally {
-            m_dependency.releaseWriteLockIfHeld();
+        } else {
+            // Base does not contain the service, let's try to add it.
+            TransformedServiceReference transformed = new TransformedServiceReferenceImpl(reference);
+            transformed = accept(transformed);
+            if (transformed != null) {
+                // case 2
+                m_matchingReferences.put(reference, transformed);
+                onNewMatchingService(transformed);
+            }
         }
-
-
     }
 
-    public void removedService(ServiceReference reference, Object service) {
+    public void onDepartureOfAMatchingService(TransformedServiceReference reference, Object service) {
         ServiceReference oldFirst;
         RankingResult result = null;
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             // We store the currently 'first' service reference.
             oldFirst = getFirstService();
-            if (removeMatchingReferenceById(reference)) {
-                // We apply our ranking strategy.
-                result = applyRankingOnDeparture(reference);
-                // Set the selected services.
-                m_selectedReferences = result.selected;
-            }
+            // We apply our ranking strategy.
+            result = applyRankingOnDeparture(reference);
+            // Set the selected services.
+            m_selectedReferences = result.selected;
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }
         // Fire the event (outside from the synchronized region)
-        if (result != null) {
-            fireUpdate(getSelectedServices(), result.departures, result.arrivals, oldFirst,
-                    getFirstService(), service, null);
+        fireUpdate(getSelectedServices(), result.departures, result.arrivals, oldFirst,
+                getFirstService(), service, null);
+    }
+
+    public void removedService(ServiceReference reference, Object service) {
+        // A service is leaving
+        // 1 - the service was in the matching set => real departure
+        // 2 - the service was not in the matching set => nothing do do.
+
+        // TODO Lock
+        TransformedServiceReference initial = m_matchingReferences.remove(reference);
+        if (initial != null) {
+            // Case 1
+            onDepartureOfAMatchingService(initial, service);
         }
+        // else case 2.
     }
 
     /**
@@ -435,6 +548,17 @@ public class SelectedServicesManager implements TrackerCustomizer {
             m_dependency.acquireWriteLockIfNotHeld();
             m_filter = filter;
             if (tracker == null) {
+                ServiceTrackingInterceptor interceptor = m_trackingInterceptors.getLast();
+                if (interceptor != null  && interceptor instanceof FilterBasedServiceTrackingInterceptor) {
+                    // Remove it first.
+                    m_trackingInterceptors.removeLast();
+                }
+                if (m_filter != null) {
+                    // Add the new one.
+                    ServiceTrackingInterceptor newInterceptor = new FilterBasedServiceTrackingInterceptor(m_filter);
+                    m_trackingInterceptors.addLast(newInterceptor);
+                }
+
                 // Tracker closed, no problem
                 return new ChangeSet(Collections.<ServiceReference>emptyList(),
                         Collections.<ServiceReference>emptyList(),
@@ -450,15 +574,10 @@ public class SelectedServicesManager implements TrackerCustomizer {
                 // Recompute the matching services.
                 m_matchingReferences.clear();
                 for (ServiceReference reference : tracker.getServiceReferencesList()) {
-                    if (ServiceReferenceUtils.match(m_filter, reference) && m_dependency.match(reference)) {
-                        // Matching service
-                        // If we already have a reference with the same id, replace it.
-                        int currentIndex = ServiceReferenceUtils.getIndexOfServiceReferenceById(m_matchingReferences, reference);
-                        if (currentIndex == -1) {
-                            m_matchingReferences.add(reference);
-                        } else {
-                            m_matchingReferences.set(currentIndex, reference);
-                        }
+                    TransformedServiceReference ref = new TransformedServiceReferenceImpl(reference);
+                    ref = accept(ref);
+                    if (ref != null) {
+                        m_matchingReferences.put(reference, ref);
                     }
                 }
 
@@ -471,7 +590,7 @@ public class SelectedServicesManager implements TrackerCustomizer {
                 if (allServices.isEmpty()) {
                     references = Collections.emptyList();
                 } else {
-                    references = m_interceptor.getServiceReferences(m_dependency, allServices);
+                    references = m_rankingInterceptor.getServiceReferences(m_dependency, allServices);
                 }
 
                 RankingResult result = computeDifferences(beforeRanking, references);
@@ -511,20 +630,20 @@ public class SelectedServicesManager implements TrackerCustomizer {
         }
     }
 
-    public ChangeSet setInterceptor(ServiceRankingInterceptor interceptor) {
+    public ChangeSet setRankingInterceptor(ServiceRankingInterceptor interceptor) {
         m_dependency.getComponentInstance().getFactory().getLogger().log(Log.INFO, "Dependency " + m_dependency.getId
                 () + " is getting a new ranking interceptor : " + interceptor);
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             ServiceReference oldBest = getFirstService();
             List<ServiceReference> beforeRanking = getSelectedServices();
-            m_interceptor = interceptor;
-            m_interceptor.open(m_dependency);
+            m_rankingInterceptor = interceptor;
+            m_rankingInterceptor.open(m_dependency);
 
             final List<ServiceReference> allServices = getMatchingServices();
             List<ServiceReference> references = Collections.emptyList();
             if (!allServices.isEmpty()) {
-                references = m_interceptor.getServiceReferences(m_dependency, allServices);
+                references = m_rankingInterceptor.getServiceReferences(m_dependency, allServices);
             }
             RankingResult result = computeDifferences(beforeRanking, references);
             m_selectedReferences = result.selected;
@@ -539,23 +658,33 @@ public class SelectedServicesManager implements TrackerCustomizer {
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_comparator = cmp;
-            return setInterceptor(new ComparatorBasedServiceRankingInterceptor(cmp));
+            return setRankingInterceptor(new ComparatorBasedServiceRankingInterceptor(cmp));
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }
     }
 
     public void close() {
-        m_interceptor.close(m_dependency);
-        m_tracker.close();
         reset();
+    }
+
+    public void invalidateMatchingServices() {
+        System.out.println("Invalidate matching services");
+        try {
+            m_dependency.acquireWriteLockIfNotHeld();
+            m_matchingReferences.clear();
+            fireBaseSetChanges();
+            m_dependency.onChange(fireBaseSetChanges());
+        } finally {
+            m_dependency.releaseWriteLockIfHeld();
+        }
     }
 
     public void invalidateSelectedServices() {
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_selectedReferences.clear();
-            m_interceptor.getServiceReferences(m_dependency, getMatchingServices());
+            m_rankingInterceptor.getServiceReferences(m_dependency, getMatchingServices());
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }

@@ -20,7 +20,6 @@ package org.apache.felix.ipojo.util;
 
 import org.apache.felix.ipojo.ComponentInstance;
 import org.apache.felix.ipojo.IPOJOServiceFactory;
-import org.apache.felix.ipojo.dependency.impl.InterceptableIPOJOContext;
 import org.apache.felix.ipojo.dependency.impl.SelectedServicesManager;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Filter;
@@ -110,7 +109,7 @@ public abstract class DependencyModel {
      * Bundle context used by the dependency.
      * (may be a {@link org.apache.felix.ipojo.ServiceContext}).
      */
-    private InterceptableIPOJOContext m_context;
+    private BundleContext m_context;
     /**
      * The actual state of the dependency.
      * {@link DependencyModel#UNRESOLVED} at the beginning.
@@ -173,7 +172,7 @@ public abstract class DependencyModel {
         }
 
         if (context != null) {
-            m_context = new InterceptableIPOJOContext(this, context);
+            m_context = context;
             // If the context is null, it gonna be set later using the setBundleContext method.
         }
 
@@ -202,9 +201,8 @@ public abstract class DependencyModel {
      */
     public void start() {
         m_state = UNRESOLVED;
-        m_context.open();
-        m_selectedServicesManager.open();
         m_tracker = new Tracker(m_context, m_specification.getName(), m_selectedServicesManager);
+        m_selectedServicesManager.open();
         m_tracker.open();
 
         if (m_contextSourceManager != null) {
@@ -231,6 +229,10 @@ public abstract class DependencyModel {
         m_selectedServicesManager.invalidateSelectedServices();
     }
 
+    public void invalidateMatchingServices() {
+        m_selectedServicesManager.invalidateMatchingServices();
+    }
+
     /**
      * Closes the tracking.
      * The dependency becomes {@link DependencyModel#UNRESOLVED}
@@ -246,7 +248,6 @@ public abstract class DependencyModel {
             }
             m_boundServices.clear();
             m_selectedServicesManager.close();
-            m_context.close();
             ungetAllServices();
             m_state = UNRESOLVED;
             if (m_contextSourceManager != null) {
@@ -861,7 +862,7 @@ public abstract class DependencyModel {
      */
     public void setBundleContext(BundleContext context) {
         if (m_tracker == null) { // Not started ...
-            m_context = new InterceptableIPOJOContext(this, context);
+            m_context = context;
         } else {
             throw new UnsupportedOperationException("Dynamic bundle (i.e. service) context change is not supported");
         }
@@ -1069,11 +1070,7 @@ public abstract class DependencyModel {
         return m_selectedServicesManager;
     }
 
-    public List<ServiceReference> getBaseServiceSet() {
-        if (m_tracker == null) {
-            return Collections.emptyList();
-        } else {
-            return m_tracker.getServiceReferencesList();
-        }
+    public Tracker getTracker() {
+        return m_tracker;
     }
 }

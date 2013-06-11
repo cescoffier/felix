@@ -557,7 +557,7 @@ public class Dependency extends DependencyModel implements FieldInterceptor, Met
      * Get the used service references list.
      * @return the used service reference or null if no service reference are available.
      */
-    public List getServiceReferencesAsList() {
+    public List<ServiceReference> getServiceReferencesAsList() {
         ServiceReference[] refs = super.getServiceReferences();
         if (refs == null) {
             return null;

@@ -23,6 +23,7 @@ import org.apache.felix.ipojo.dependency.impl.TransformedServiceReferenceImpl;
 import org.junit.Test;
 import org.osgi.framework.ServiceReference;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.fest.assertions.Assertions.assertThat;
@@ -52,7 +53,7 @@ public class TransformedServiceReferenceTest {
     public void removePropertyToReference() {
         ServiceReference<List> reference = mock(ServiceReference.class);
         when(reference.getPropertyKeys()).thenReturn(new String[] {"service.id", "foo"});
-        when(reference.getProperty("service.id")).thenReturn(42);
+        when(reference.getProperty("service.id")).thenReturn(42l);
         when(reference.getProperty("foo")).thenReturn("test");
 
         ServiceReference newReference = new TransformedServiceReferenceImpl<List>(reference).removeProperty("foo");
@@ -65,12 +66,30 @@ public class TransformedServiceReferenceTest {
     public void equals() {
         ServiceReference<List> reference = mock(ServiceReference.class);
         when(reference.getPropertyKeys()).thenReturn(new String[] {"service.id", "foo"});
-        when(reference.getProperty("service.id")).thenReturn(42);
+        when(reference.getProperty("service.id")).thenReturn((long) 42);
         when(reference.getProperty("foo")).thenReturn("test");
 
         ServiceReference newReference1 = new TransformedServiceReferenceImpl<List>(reference).removeProperty("foo");
         ServiceReference newReference2 = new TransformedServiceReferenceImpl<List>(reference).removeProperty("foo");
 
         assertThat(newReference1).isEqualTo(newReference2);
+    }
+
+    @Test
+    public void list() {
+        ServiceReference<List> reference = mock(ServiceReference.class);
+        when(reference.getPropertyKeys()).thenReturn(new String[] {"service.id", "foo"});
+        when(reference.getProperty("service.id")).thenReturn(42);
+        when(reference.getProperty("foo")).thenReturn("test");
+
+        ServiceReference newReference1 = new TransformedServiceReferenceImpl<List>(reference).removeProperty("foo");
+        ServiceReference newReference2 = new TransformedServiceReferenceImpl<List>(reference).removeProperty("foo");
+
+        List<ServiceReference> references = new ArrayList<ServiceReference>();
+        references.add(newReference1);
+
+        assertThat(references.contains(newReference1));
+        assertThat(references.contains(reference));
+        assertThat(references.contains(newReference2));
     }
 }

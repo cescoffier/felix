@@ -43,7 +43,13 @@ public interface TransformedServiceReference<S> extends ServiceReference<S> {
 
     public TransformedServiceReference<S> addProperty(String name, Object value);
 
+    public TransformedServiceReference<S> addPropertyIfAbsent(String name, Object value);
+
+    public Object get(String name);
+
     public TransformedServiceReference<S> removeProperty(String name);
+
+    public boolean contains(String name);
 
     public ServiceReference<S> getInitialReference();
 }

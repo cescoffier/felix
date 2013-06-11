@@ -17,28 +17,47 @@
  * under the License.
  */
 
-package org.apache.felix.ipojo.dependency.interceptors;
+package org.apache.felix.ipojo.dependency.impl;
 
+import org.apache.felix.ipojo.dependency.interceptors.ServiceTrackingInterceptor;
+import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.Filter;
 import org.osgi.framework.ServiceReference;
 
 /**
- * A service tracking interceptor doing nothing.
- * It accepts all references.
+ * An implementation of the service tracking interceptor using a filter.
  */
-public class EmptyServiceTrackingInterceptor implements  ServiceTrackingInterceptor {
-    public void open(DependencyModel dependency, BundleContext context) { }
+public class FilterBasedServiceTrackingInterceptor implements ServiceTrackingInterceptor {
 
-    public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context, TransformedServiceReference<S> ref) {
-        return  ref;
+    private final Filter m_filter;
+
+    public FilterBasedServiceTrackingInterceptor(Filter filter) {
+        m_filter = filter;
     }
 
-    public void close(DependencyModel dependency, BundleContext context) { }
+    public void open(DependencyModel dependency, BundleContext context) {
+
+    }
+
+    public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context, TransformedServiceReference<S> ref) {
+        if (ServiceReferenceUtils.match(m_filter, ref) && dependency.match(ref)) {
+            return ref;
+        } else {
+            return null;
+        }
+    }
+
+    public void close(DependencyModel dependency, BundleContext context) {
+
+    }
 
     public <S> S getService(DependencyModel dependency, S service, ServiceReference<S> reference) {
         return service;
     }
 
-    public void ungetService(DependencyModel dependency, boolean noMoreUsage, ServiceReference reference) { }
+    public void ungetService(DependencyModel dependency, boolean noMoreUsage, ServiceReference reference) {
+
+    }
 }

@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.util.Collection;
 import java.util.Dictionary;
 
+import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleException;
@@ -271,6 +272,10 @@ public class IPojoContext implements BundleContext, ServiceContext {
      * @see org.osgi.framework.BundleContext#getService(org.osgi.framework.ServiceReference)
      */
     public <S> S getService(ServiceReference<S> ref) {
+        //TODO Move this somewhere else
+        if (ref instanceof TransformedServiceReference) {
+            ref = ((TransformedServiceReference<S>) ref).getInitialReference();
+        }
         if (m_serviceContext == null) {
             return m_bundleContext.getService(ref);
         } else {
@@ -474,6 +479,10 @@ public class IPojoContext implements BundleContext, ServiceContext {
      * @see org.osgi.framework.BundleContext#ungetService(org.osgi.framework.ServiceReference)
      */
     public boolean ungetService(ServiceReference reference) {
+        //TODO Move this somewhere else
+        if (reference instanceof TransformedServiceReference) {
+            reference = ((TransformedServiceReference) reference).getInitialReference();
+        }
         if (m_serviceContext == null) {
             return m_bundleContext.ungetService(reference);
         } else {
