@@ -87,7 +87,13 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
     }
 
     public String[] getPropertyKeys() {
-        return new ArrayList<String>(m_properties.keySet()).toArray(new String[m_properties.size()]);
+        List<String> keys = new ArrayList<String>();
+        for (Map.Entry<String, Object> entry : m_properties.entrySet()) {
+            if (entry.getValue() != null) {
+                keys.add(entry.getKey());
+            }
+        }
+        return keys.toArray(new String[keys.size()]);
     }
 
     public Bundle getBundle() {
