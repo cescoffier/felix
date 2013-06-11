@@ -194,7 +194,6 @@ public class SelectedServicesManager implements TrackerCustomizer {
     private void addTrackingInterceptor(ServiceTrackingInterceptor interceptor) {
         // A new interceptor arrives. Insert it at the beginning of the list.
         // TODO Locking.
-        System.out.println("Adding interceptor to " + m_dependency + " for " + m_dependency.getComponentInstance().getInstanceName());
         m_trackingInterceptors.addFirst(interceptor);
         interceptor.open(m_dependency, m_dependency.getBundleContext());
         m_dependency.onChange(fireBaseSetChanges());
@@ -287,7 +286,6 @@ public class SelectedServicesManager implements TrackerCustomizer {
             if (m_selectedReferences.isEmpty()) {
                 return null;
             }
-            System.out.println(m_selectedReferences.get(0));
             return m_selectedReferences.get(0);
         } finally {
             m_dependency.releaseReadLockIfHeld();
@@ -669,7 +667,6 @@ public class SelectedServicesManager implements TrackerCustomizer {
     }
 
     public void invalidateMatchingServices() {
-        System.out.println("Invalidate matching services");
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_matchingReferences.clear();

@@ -20,8 +20,9 @@
 package org.apache.felix.ipojo.dependency.impl;
 
 import org.apache.felix.ipojo.context.ServiceReferenceImpl;
-import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
-import org.osgi.framework.*;
+import org.osgi.framework.Constants;
+import org.osgi.framework.Filter;
+import org.osgi.framework.ServiceReference;
 
 import java.util.List;
 
@@ -63,28 +64,6 @@ public class ServiceReferenceUtils {
             if (reference.getProperty(Constants.SERVICE_ID).equals(id)) {
                 return reference;
             }
-        }
-        return null;
-    }
-
-    public static int getIndexOfServiceReferenceById(List<? extends ServiceReference> references,
-                                                     ServiceReference ref) {
-        Object id = ref.getProperty(Constants.SERVICE_ID);
-        int index = 0;
-        for (ServiceReference reference : references) {
-            if (reference.getProperty(Constants.SERVICE_ID).equals(id)) {
-                return index;
-            }
-            index++;
-        }
-        return -1;
-    }
-
-    public static ServiceReference[] getServiceReferencesBySpecification(String classname, BundleContext context) {
-        try {
-            return context.getServiceReferences(classname, null);
-        } catch (InvalidSyntaxException e) {
-            // Cannot happen.
         }
         return null;
     }
