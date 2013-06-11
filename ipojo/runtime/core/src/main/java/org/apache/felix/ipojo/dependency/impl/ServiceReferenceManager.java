@@ -475,18 +475,18 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         if (m_matchingReferences.containsKey(reference)) {
             // do we still accept the reference
             TransformedServiceReference initial = m_matchingReferences.get(reference);
-            TransformedServiceReference transformed = new TransformedServiceReferenceImpl(reference);
-            transformed = accept(transformed);
-            if (transformed == null) {
+            TransformedServiceReference accepted = new TransformedServiceReferenceImpl(reference);
+            accepted = accept(accepted);
+            if (accepted == null) {
                 // case 1
                 m_matchingReferences.remove(reference);
                 onDepartureOfAMatchingService(initial, service);
             }  else {
                 // Do we have a real change
-                if (! ServiceReferenceUtils.areStrictlyEquals(initial, transformed)) {
+                if (! ServiceReferenceUtils.areStrictlyEquals(initial, accepted)) {
                     // case 3
-                    m_matchingReferences.put(reference, transformed);
-                    onModificationOfAMatchingService(transformed, service);
+                    m_matchingReferences.put(reference, accepted);
+                    onModificationOfAMatchingService(accepted, service);
                 }
             }
         } else {

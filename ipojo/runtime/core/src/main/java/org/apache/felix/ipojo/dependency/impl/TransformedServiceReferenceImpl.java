@@ -36,6 +36,10 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
 
     public TransformedServiceReferenceImpl(ServiceReference<S> origin) {
         this.m_origin = origin;
+        // Copy properties
+        for (String key : origin.getPropertyKeys()) {
+            m_properties.put(key, origin.getProperty(key));
+        }
     }
 
     public TransformedServiceReferenceImpl<S> addProperty(String name, Object value) {
@@ -54,7 +58,7 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
     }
 
     public Object get(String name) {
-        return getAllProperties().get(name);
+        return m_properties.get(name);
     }
 
     public TransformedServiceReferenceImpl<S> removeProperty(String name) {
@@ -67,7 +71,7 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
     }
 
     public boolean contains(String name) {
-        return getAllProperties().containsKey(name);
+        return m_properties.containsKey(name);
     }
 
     public ServiceReference<S> getInitialReference() {
@@ -79,28 +83,11 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
     }
 
     public Object getProperty(String key) {
-        // Excluded.
-        if (m_properties.containsKey(key)) {
-            return m_properties.get(key);
-        }
-
-        return m_origin.getProperty(key);
+        return m_properties.get(key);
     }
 
     public String[] getPropertyKeys() {
-        List<String> keys = new ArrayList<String>();
-        Collections.addAll(keys, m_origin.getPropertyKeys());
-        // Add all non null property
-        for (Map.Entry<String, Object> entry : m_properties.entrySet()) {
-            if (entry.getValue() != null) {
-                keys.add(entry.getKey());
-            } else {
-                // Remove the property from the list
-                keys.remove(entry.getKey());
-            }
-        }
-
-        return keys.toArray(new String[keys.size()]);
+        return new ArrayList<String>(m_properties.keySet()).toArray(new String[m_properties.size()]);
     }
 
     public Bundle getBundle() {
@@ -173,14 +160,6 @@ public class TransformedServiceReferenceImpl<S> implements TransformedServiceRef
 
     @Override
     public String toString() {
-        return getInitialReference().toString() + getAllProperties();
-    }
-
-    private Map<String, ?> getAllProperties() {
-        TreeMap<String, Object> props = new TreeMap<String, Object>();
-        for (String key : getPropertyKeys()) {
-            props.put(key, getProperty(key));
-        }
-        return props;
+        return getInitialReference().toString() + m_properties;
     }
 }
