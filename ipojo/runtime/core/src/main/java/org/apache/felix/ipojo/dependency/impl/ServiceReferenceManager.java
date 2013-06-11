@@ -545,18 +545,22 @@ public class ServiceReferenceManager implements TrackerCustomizer {
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_filter = filter;
-            if (tracker == null) {
+
+            if (! m_trackingInterceptors.isEmpty()) {
                 ServiceTrackingInterceptor interceptor = m_trackingInterceptors.getLast();
                 if (interceptor != null  && interceptor instanceof FilterBasedServiceTrackingInterceptor) {
                     // Remove it first.
                     m_trackingInterceptors.removeLast();
                 }
-                if (m_filter != null) {
-                    // Add the new one.
-                    ServiceTrackingInterceptor newInterceptor = new FilterBasedServiceTrackingInterceptor(m_filter);
-                    m_trackingInterceptors.addLast(newInterceptor);
-                }
+            }
 
+            if (m_filter != null) {
+                // Add the new one.
+                ServiceTrackingInterceptor newInterceptor = new FilterBasedServiceTrackingInterceptor(m_filter);
+                m_trackingInterceptors.addLast(newInterceptor);
+            }
+
+            if (tracker == null) {
                 // Tracker closed, no problem
                 return new ChangeSet(Collections.<ServiceReference>emptyList(),
                         Collections.<ServiceReference>emptyList(),
