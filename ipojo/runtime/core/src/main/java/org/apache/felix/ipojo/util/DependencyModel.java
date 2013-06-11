@@ -20,7 +20,7 @@ package org.apache.felix.ipojo.util;
 
 import org.apache.felix.ipojo.ComponentInstance;
 import org.apache.felix.ipojo.IPOJOServiceFactory;
-import org.apache.felix.ipojo.dependency.impl.SelectedServicesManager;
+import org.apache.felix.ipojo.dependency.impl.ServiceReferenceManager;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.Filter;
 import org.osgi.framework.InvalidSyntaxException;
@@ -78,7 +78,7 @@ public abstract class DependencyModel {
     /**
      * The service reference manager.
      */
-    protected final SelectedServicesManager m_selectedServicesManager;
+    protected final ServiceReferenceManager m_serviceReferenceManager;
     /**
      * The manager handling context sources.
      */
@@ -176,7 +176,7 @@ public abstract class DependencyModel {
             // If the context is null, it gonna be set later using the setBundleContext method.
         }
 
-        m_selectedServicesManager = new SelectedServicesManager(this, filter, comparator);
+        m_serviceReferenceManager = new ServiceReferenceManager(this, filter, comparator);
 
         if (filter != null) {
             try {
@@ -201,8 +201,8 @@ public abstract class DependencyModel {
      */
     public void start() {
         m_state = UNRESOLVED;
-        m_tracker = new Tracker(m_context, m_specification.getName(), m_selectedServicesManager);
-        m_selectedServicesManager.open();
+        m_tracker = new Tracker(m_context, m_specification.getName(), m_serviceReferenceManager);
+        m_serviceReferenceManager.open();
         m_tracker.open();
 
         if (m_contextSourceManager != null) {
@@ -226,11 +226,11 @@ public abstract class DependencyModel {
      * changed and must be recomputed.
      */
     public void invalidateSelectedServices() {
-        m_selectedServicesManager.invalidateSelectedServices();
+        m_serviceReferenceManager.invalidateSelectedServices();
     }
 
     public void invalidateMatchingServices() {
-        m_selectedServicesManager.invalidateMatchingServices();
+        m_serviceReferenceManager.invalidateMatchingServices();
     }
 
     /**
@@ -247,7 +247,7 @@ public abstract class DependencyModel {
                 m_tracker = null;
             }
             m_boundServices.clear();
-            m_selectedServicesManager.close();
+            m_serviceReferenceManager.close();
             ungetAllServices();
             m_state = UNRESOLVED;
             if (m_contextSourceManager != null) {
@@ -332,7 +332,7 @@ public abstract class DependencyModel {
                 return;
             }
 
-            if (m_optional || !m_selectedServicesManager.isEmpty()) {
+            if (m_optional || !m_serviceReferenceManager.isEmpty()) {
                 // The dependency is valid
                 if (m_state == UNRESOLVED) {
                     m_state = RESOLVED;
@@ -607,7 +607,7 @@ public abstract class DependencyModel {
         Filter filter;
         try {
             acquireReadLockIfNotHeld();
-            filter = m_selectedServicesManager.getFilter();
+            filter = m_serviceReferenceManager.getFilter();
         } finally {
             releaseReadLockIfHeld();
         }
@@ -628,7 +628,7 @@ public abstract class DependencyModel {
     public void setFilter(Filter filter) {
         try {
             acquireWriteLockIfNotHeld();
-            SelectedServicesManager.ChangeSet changeSet = m_selectedServicesManager.setFilter(filter, m_tracker);
+            ServiceReferenceManager.ChangeSet changeSet = m_serviceReferenceManager.setFilter(filter, m_tracker);
             // We call this method when holding the lock, but the method may decide to release the lock to invoke
             // callbacks, so we must defensively unlock the lock in the finally block.
             applyReconfiguration(changeSet);
@@ -644,7 +644,7 @@ public abstract class DependencyModel {
      * still hold when this method returns.
      * @param changeSet the reconfiguration changes
      */
-    public void applyReconfiguration(SelectedServicesManager.ChangeSet changeSet) {
+    public void applyReconfiguration(ServiceReferenceManager.ChangeSet changeSet) {
         List<ServiceReference> arr = new ArrayList<ServiceReference>();
         List<ServiceReference> dep = new ArrayList<ServiceReference>();
 
@@ -743,7 +743,7 @@ public abstract class DependencyModel {
                     // Call the callback on all non already injected service.
                     if (m_state == RESOLVED) {
 
-                        for (ServiceReference ref : m_selectedServicesManager.getSelectedServices()) {
+                        for (ServiceReference ref : m_serviceReferenceManager.getSelectedServices()) {
                             if (!m_boundServices.contains(ref)) {
                                 m_boundServices.add(ref);
                                 arrivals.add(ref);
@@ -832,7 +832,7 @@ public abstract class DependencyModel {
         final Comparator<ServiceReference> comparator;
         try {
             acquireReadLockIfNotHeld();
-            comparator = m_selectedServicesManager.getComparator();
+            comparator = m_serviceReferenceManager.getComparator();
         } finally {
             releaseReadLockIfHeld();
         }
@@ -847,7 +847,7 @@ public abstract class DependencyModel {
     public void setComparator(Comparator<ServiceReference> cmp) {
         try {
             acquireWriteLockIfNotHeld();
-            SelectedServicesManager.ChangeSet changeSet = m_selectedServicesManager.setComparator(cmp);
+            ServiceReferenceManager.ChangeSet changeSet = m_serviceReferenceManager.setComparator(cmp);
             applyReconfiguration(changeSet);
         } finally {
             releaseWriteLockIfHeld();
@@ -963,7 +963,7 @@ public abstract class DependencyModel {
      * Callbacks call by the ServiceReferenceManager when the selected service set has changed.
      * @param set the change set.
      */
-    public void onChange(SelectedServicesManager.ChangeSet set) {
+    public void onChange(ServiceReferenceManager.ChangeSet set) {
         try {
             acquireWriteLockIfNotHeld();
             // First handle the static case with a frozen state
@@ -1066,8 +1066,8 @@ public abstract class DependencyModel {
         }
     }
 
-    public SelectedServicesManager getServiceReferenceManager() {
-        return m_selectedServicesManager;
+    public ServiceReferenceManager getServiceReferenceManager() {
+        return m_serviceReferenceManager;
     }
 
     public Tracker getTracker() {

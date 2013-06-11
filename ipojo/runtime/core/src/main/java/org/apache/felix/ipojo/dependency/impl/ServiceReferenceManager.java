@@ -38,7 +38,7 @@ import java.util.*;
  * It handles the matching services and the selected service set.
  * As this class is tied to the dependency model, it reuses the same locks objects.
  */
-public class SelectedServicesManager implements TrackerCustomizer {
+public class ServiceReferenceManager implements TrackerCustomizer {
 
     /**
      * The dependency.
@@ -91,7 +91,7 @@ public class SelectedServicesManager implements TrackerCustomizer {
      * @param filter     the filter
      * @param comparator the comparator
      */
-    public SelectedServicesManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
+    public ServiceReferenceManager(DependencyModel dep, Filter filter, Comparator<ServiceReference> comparator) {
         m_dependency = dep;
         m_filter = filter;
         if (m_filter != null) {
