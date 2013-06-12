@@ -21,7 +21,6 @@ package org.apache.felix.ipojo.dependency.interceptors;
 
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.ServiceReference;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,34 +29,30 @@ import java.util.List;
  * Default implementation of the default service tracking interceptor.
  * It accepts all references and keeps the dependencies in the `dependencies` list. This list is guarded by the
  * monitor lock.
+ *
+ * It also provides an `invalidateMatchingServices` method notifying all managed dependencies of a change in the
+ * matching service set.
  */
-public class DefaultServiceTrackingInterceptor implements  ServiceTrackingInterceptor {
+public class DefaultServiceTrackingInterceptor extends DefaultDependencyInterceptor implements ServiceTrackingInterceptor {
 
-    protected List<DependencyModel> dependencies = new ArrayList<DependencyModel>();
-
-    public void open(DependencyModel dependency) {
-        synchronized (this) {
-            dependencies.add(dependency);
-        }
-    }
-
+    /**
+     * Default implementation of the accept method.
+     * The default behavior is to accept all services as they are (no transformation).
+     * @param dependency the dependency the dependency
+     * @param context the context of the dependency the bundle context used by the dependency
+     * @param ref the reference the reference to accept, transform or reject
+     * @param <S> the type of service
+     * @return the reference as it is.
+     */
     public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context, TransformedServiceReference<S> ref) {
-        return  ref;
+        return ref;
     }
 
-    public void close(DependencyModel dependency) {
-        synchronized (this) {
-            dependencies.remove(dependency);
-        }
-    }
-
-    public <S> S getService(DependencyModel dependency, S service, ServiceReference<S> reference) {
-        return service;
-    }
-
-    public void ungetService(DependencyModel dependency, boolean noMoreUsage, ServiceReference reference) { }
-
-    public void notifyDependencies() {
+    /**
+     * Notifies the managed dependencies of a change in the set of services accepted by this interceptor.
+     * The dependency will call the accept method to recompute the set of matching services.
+     */
+    public void invalidateMatchingServices() {
         List<DependencyModel> list = new ArrayList<DependencyModel>();
         synchronized (this) {
             list.addAll(dependencies);
