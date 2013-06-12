@@ -27,9 +27,6 @@ import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReferenc
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.BundleContext;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * An interceptor adding a property (location) and hiding another property (hidden)
  * Not instantiated by default.

@@ -22,9 +22,6 @@ package org.apache.felix.ipojo.runtime.core.test.dependencies;
 import org.ops4j.pax.exam.Option;
 import org.ow2.chameleon.testing.helpers.BaseTest;
 
-import java.util.Arrays;
-import java.util.List;
-
 import static org.ops4j.pax.exam.CoreOptions.maven;
 import static org.ops4j.pax.exam.CoreOptions.wrappedBundle;
 

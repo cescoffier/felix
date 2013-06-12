@@ -21,14 +21,9 @@ package org.apache.felix.ipojo.runtime.core.test.dependencies;
 
 import org.apache.felix.ipojo.ComponentInstance;
 import org.apache.felix.ipojo.runtime.core.test.services.CheckService;
-import org.apache.felix.ipojo.runtime.core.test.services.FooService;
 import org.junit.Before;
 import org.junit.Test;
-import org.osgi.framework.ServiceReference;
-import org.ow2.chameleon.testing.helpers.TimeUtils;
 
-import java.util.Dictionary;
-import java.util.Hashtable;
 import java.util.Map;
 import java.util.Properties;
 
