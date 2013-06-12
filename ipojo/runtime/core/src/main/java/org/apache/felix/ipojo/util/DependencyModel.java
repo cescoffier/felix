@@ -847,8 +847,7 @@ public abstract class DependencyModel {
     public void setComparator(Comparator<ServiceReference> cmp) {
         try {
             acquireWriteLockIfNotHeld();
-            ServiceReferenceManager.ChangeSet changeSet = m_serviceReferenceManager.setComparator(cmp);
-            applyReconfiguration(changeSet);
+            m_serviceReferenceManager.setComparator(cmp);
         } finally {
             releaseWriteLockIfHeld();
         }
