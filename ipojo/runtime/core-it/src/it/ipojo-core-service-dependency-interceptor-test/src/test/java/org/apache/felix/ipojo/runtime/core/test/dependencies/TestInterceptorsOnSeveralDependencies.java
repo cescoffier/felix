@@ -50,7 +50,7 @@ public class TestInterceptorsOnSeveralDependencies extends Common {
         Properties configuration = new Properties();
         configuration.put("target", "(dependency.id=foo)");
         ComponentInstance interceptor = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
-                ".interceptors.PropertyInterceptor", configuration);
+                ".interceptors.PropertyTrackingInterceptor", configuration);
 
         // Create the FooConsumer
         ComponentInstance instance1 = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +

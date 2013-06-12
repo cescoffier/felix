@@ -50,7 +50,7 @@ public class TestHidingServices extends Common {
         Properties configuration = new Properties();
         configuration.put("target", "(dependency.id=foo)");
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
-                ".HidingInterceptor", configuration);
+                ".HidingTrackingInterceptor", configuration);
 
         // Create the FooConsumer
         ComponentInstance instance = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
@@ -83,7 +83,7 @@ public class TestHidingServices extends Common {
         assertThat(instance.getState()).isEqualTo(ComponentInstance.VALID);
 
         ComponentInstance interceptor = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
-                ".interceptors.HidingInterceptor", configuration);
+                ".interceptors.HidingTrackingInterceptor", configuration);
 
         // The provider is rejected => Invalid instance
         assertThat(instance.getState()).isEqualTo(ComponentInstance.INVALID);

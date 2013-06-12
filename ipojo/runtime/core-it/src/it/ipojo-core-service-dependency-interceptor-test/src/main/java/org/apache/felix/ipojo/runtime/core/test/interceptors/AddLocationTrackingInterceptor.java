@@ -24,9 +24,11 @@ import org.apache.felix.ipojo.annotations.Provides;
 import org.apache.felix.ipojo.annotations.ServiceProperty;
 import org.apache.felix.ipojo.dependency.interceptors.DefaultServiceTrackingInterceptor;
 import org.apache.felix.ipojo.dependency.interceptors.TransformedServiceReference;
-import org.apache.felix.ipojo.runtime.core.test.services.Setter;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.BundleContext;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An interceptor adding a property (location) and hiding another property (hidden)
@@ -34,24 +36,31 @@ import org.osgi.framework.BundleContext;
  */
 @Component(immediate = true)
 @Provides
-public class PropertyInterceptor extends DefaultServiceTrackingInterceptor implements Setter {
+public class AddLocationTrackingInterceptor extends DefaultServiceTrackingInterceptor {
+
+    List<DependencyModel> dependencies = new ArrayList<DependencyModel>();
 
     @ServiceProperty
     private String target;
 
-    private String prop = "kitchen";
 
+    @Override
+    public void open(DependencyModel dependency) {
+        System.out.println("open called for " + dependency.getId());
+        dependencies.add(dependency);
+    }
 
     @Override
     public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context,
                                           TransformedServiceReference<S> ref) {
-        System.out.println("Adding location");
-        return ref.addProperty("location", prop);
+        System.out.println("Accept called");
+        return ref
+                .addProperty("location", "kitchen") // Because Brian is in the kitchen.
+                .removeProperty("hidden");
     }
 
     @Override
-    public void set(String newValue) {
-        prop = newValue;
-        notifyDependencies();
+    public void close(DependencyModel dependency) {
+        dependencies.remove(dependency);
     }
 }

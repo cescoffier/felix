@@ -53,7 +53,7 @@ public class TestTransformingServices extends Common {
         Properties configuration = new Properties();
         configuration.put("target", "(dependency.id=foo)");
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
-                ".AddLocationInterceptor", configuration);
+                ".AddLocationTrackingInterceptor", configuration);
 
         // Create the FooConsumer
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components.FooConsumer");
@@ -79,7 +79,7 @@ public class TestTransformingServices extends Common {
         Properties configuration = new Properties();
         configuration.put("target", "(dependency.id=foo)");
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
-                ".AddLocationInterceptor", configuration);
+                ".AddLocationTrackingInterceptor", configuration);
 
         osgiHelper.waitForService(CheckService.class.getName(), null, 1000, true);
         CheckService check = osgiHelper.getServiceObject(CheckService.class);
@@ -121,7 +121,7 @@ public class TestTransformingServices extends Common {
         Properties config = new Properties();
         config.put("target", "(dependency.id=foo)");
         ComponentInstance interceptor = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +
-                ".interceptors.AddLocationInterceptor", config);
+                ".interceptors.AddLocationTrackingInterceptor", config);
 
         assertThat(consumer.getInstanceDescription().getState()).isEqualTo(ComponentInstance.VALID);
 
@@ -147,7 +147,7 @@ public class TestTransformingServices extends Common {
         Properties configuration = new Properties();
         configuration.put("target", "(dependency.id=foo)");
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
-                ".AddLocationInterceptor", configuration);
+                ".AddLocationTrackingInterceptor", configuration);
 
         // Create the FooConsumer
         ComponentInstance consumer = ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test" +

@@ -28,16 +28,13 @@ import org.apache.felix.ipojo.runtime.core.test.services.Setter;
 import org.apache.felix.ipojo.util.DependencyModel;
 import org.osgi.framework.BundleContext;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * An interceptor adding a property (location) and hiding another property (hidden)
  * Not instantiated by default.
  */
 @Component(immediate = true)
 @Provides
-public class HidingInterceptor extends DefaultServiceTrackingInterceptor implements Setter {
+public class HidingTrackingInterceptor extends DefaultServiceTrackingInterceptor implements Setter {
 
     @ServiceProperty
     private String target;
@@ -59,6 +56,6 @@ public class HidingInterceptor extends DefaultServiceTrackingInterceptor impleme
     public void set(String newValue) {
         prop = newValue;
         System.out.println("updating value to " + newValue);
-        notifyDependencies();
+        invalidateMatchingServices();
     }
 }
