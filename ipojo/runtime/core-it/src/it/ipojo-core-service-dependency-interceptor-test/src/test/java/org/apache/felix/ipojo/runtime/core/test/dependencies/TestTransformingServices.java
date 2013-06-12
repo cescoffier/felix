@@ -75,12 +75,6 @@ public class TestTransformingServices extends Common {
         ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components" +
                 ".FooConsumer");
 
-        // Create the interceptor
-        Properties configuration = new Properties();
-        configuration.put("target", "(dependency.id=foo)");
-        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
-                ".AddLocationTrackingInterceptor", configuration);
-
         osgiHelper.waitForService(CheckService.class.getName(), null, 1000, true);
         CheckService check = osgiHelper.getServiceObject(CheckService.class);
         assertThat(check.check());
@@ -88,12 +82,11 @@ public class TestTransformingServices extends Common {
         assertThat(props.get("location")).isNull();
         assertThat(props.get("hidden")).isNotNull();
 
-        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.components" +
-                ".FooConsumer", "second");
-
-
-        ServiceReference ref = ipojoHelper.getServiceReferenceByName(CheckService.class.getName(), "second");
-        check = (CheckService) osgiHelper.getServiceObject(ref);
+        // Create the interceptor
+        Properties configuration = new Properties();
+        configuration.put("target", "(dependency.id=foo)");
+        ipojoHelper.createComponentInstance("org.apache.felix.ipojo.runtime.core.test.interceptors" +
+                ".AddLocationTrackingInterceptor", configuration);
 
         assertThat(check.check());
         props = (Map<String, ?>) check.getProps().get("props");

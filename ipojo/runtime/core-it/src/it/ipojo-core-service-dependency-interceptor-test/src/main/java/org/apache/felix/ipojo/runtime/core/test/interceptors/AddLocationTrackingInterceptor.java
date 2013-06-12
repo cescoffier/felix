@@ -38,29 +38,16 @@ import java.util.List;
 @Provides
 public class AddLocationTrackingInterceptor extends DefaultServiceTrackingInterceptor {
 
-    List<DependencyModel> dependencies = new ArrayList<DependencyModel>();
-
     @ServiceProperty
     private String target;
 
 
     @Override
-    public void open(DependencyModel dependency) {
-        System.out.println("open called for " + dependency.getId());
-        dependencies.add(dependency);
-    }
-
-    @Override
     public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context,
                                           TransformedServiceReference<S> ref) {
-        System.out.println("Accept called");
         return ref
                 .addProperty("location", "kitchen") // Because Brian is in the kitchen.
                 .removeProperty("hidden");
     }
 
-    @Override
-    public void close(DependencyModel dependency) {
-        dependencies.remove(dependency);
-    }
 }

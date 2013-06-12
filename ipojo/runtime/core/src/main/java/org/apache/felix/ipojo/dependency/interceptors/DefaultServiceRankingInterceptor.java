@@ -31,6 +31,8 @@ import java.util.List;
  *
  * It also provides an `invalidateSelectedServices` method notifying all managed dependencies of a change in the
  * selection service set.
+ *
+ * onDeparture, onArrival and onModified methods delegates to the getServiceReferences method.
  */
 public class DefaultServiceRankingInterceptor extends DefaultDependencyInterceptor implements
         ServiceRankingInterceptor {
@@ -56,14 +58,14 @@ public class DefaultServiceRankingInterceptor extends DefaultDependencyIntercept
     }
 
     public List<ServiceReference> onServiceArrival(DependencyModel dependency, List<ServiceReference> matching, ServiceReference<?> reference) {
-        return matching;
+        return getServiceReferences(dependency, matching);
     }
 
     public List<ServiceReference> onServiceDeparture(DependencyModel dependency, List<ServiceReference> matching, ServiceReference<?> reference) {
-        return matching;
+        return getServiceReferences(dependency, matching);
     }
 
     public List<ServiceReference> onServiceModified(DependencyModel dependency, List<ServiceReference> matching, ServiceReference<?> reference) {
-        return matching;
+        return getServiceReferences(dependency, matching);
     }
 }

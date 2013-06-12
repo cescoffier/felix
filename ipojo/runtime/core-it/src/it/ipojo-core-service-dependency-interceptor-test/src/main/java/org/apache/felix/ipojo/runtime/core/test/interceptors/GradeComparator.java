@@ -17,40 +17,21 @@
  * under the License.
  */
 
-package org.apache.felix.ipojo.runtime.core.test.components;
+package org.apache.felix.ipojo.runtime.core.test.interceptors;
 
-import org.apache.felix.ipojo.annotations.Component;
-import org.apache.felix.ipojo.annotations.Provides;
-import org.apache.felix.ipojo.annotations.ServiceProperty;
-import org.apache.felix.ipojo.annotations.StaticServiceProperty;
-import org.apache.felix.ipojo.runtime.core.test.services.FooService;
+import org.osgi.framework.ServiceReference;
 
-import java.util.Properties;
+import java.util.Comparator;
 
-/**
- * Provides FooService
- */
-@Component
-@Provides(properties = @StaticServiceProperty(name="hidden", value = "hidden", type ="string"))
-public class FooProvider implements FooService {
-
-    @ServiceProperty(value = "0")
-    private int grade;
-
+public class GradeComparator implements Comparator<ServiceReference> {
     @Override
-    public boolean foo() {
-        return true;
+    public int compare(ServiceReference ref1, ServiceReference ref2) {
+        Integer grade0;
+        Integer grade1;
+
+        grade0 = (Integer) ref1.getProperty("grade");
+        grade1 = (Integer) ref2.getProperty("grade");
+
+        return grade1.compareTo(grade0); // Best grade first.
     }
-
-    @Override
-    public Properties fooProps() {
-        return null;
-    }
-
-    @Override
-    public int getGrade() {
-        return grade;
-    }
-
-
 }

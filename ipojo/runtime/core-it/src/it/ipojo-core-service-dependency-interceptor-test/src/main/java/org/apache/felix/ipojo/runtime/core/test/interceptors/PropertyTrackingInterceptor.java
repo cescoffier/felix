@@ -45,7 +45,6 @@ public class PropertyTrackingInterceptor extends DefaultServiceTrackingIntercept
     @Override
     public <S> TransformedServiceReference<S> accept(DependencyModel dependency, BundleContext context,
                                           TransformedServiceReference<S> ref) {
-        System.out.println("Adding location");
         return ref.addProperty("location", prop);
     }
 

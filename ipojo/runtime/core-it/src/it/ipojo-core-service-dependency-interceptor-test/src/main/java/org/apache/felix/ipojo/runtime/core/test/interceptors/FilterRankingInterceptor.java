@@ -19,12 +19,58 @@
 
 package org.apache.felix.ipojo.runtime.core.test.interceptors;
 
+import org.apache.felix.ipojo.annotations.Component;
+import org.apache.felix.ipojo.annotations.Provides;
+import org.apache.felix.ipojo.annotations.ServiceProperty;
+import org.apache.felix.ipojo.dependency.interceptors.DefaultServiceRankingInterceptor;
+import org.apache.felix.ipojo.runtime.core.test.services.Setter;
+import org.apache.felix.ipojo.util.DependencyModel;
+import org.osgi.framework.ServiceReference;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
 /**
- * Created with IntelliJ IDEA.
- * User: clement
- * Date: 12/06/13
- * Time: 09:10
- * To change this template use File | Settings | File Templates.
+ * An implementation of the ranking interceptor accepting only services with a 'grade' property and sorting them by
+ * value.
  */
-public class FilterRankingInterceptor {
+@Component(immediate = true)
+@Provides
+public class FilterRankingInterceptor extends DefaultServiceRankingInterceptor implements Setter {
+
+    @ServiceProperty
+    private String target;
+
+    private Comparator<ServiceReference> comparator;
+
+    private boolean inverse = false;
+
+    public FilterRankingInterceptor() {
+        comparator = new GradeComparator();
+    }
+
+    @Override
+    public List<ServiceReference> getServiceReferences(DependencyModel dependency, List<ServiceReference> matching) {
+        List<ServiceReference> references = new ArrayList<ServiceReference>();
+        for (ServiceReference ref : matching) {
+            if (ref.getProperty("grade") != null) {
+                references.add(ref);
+            }
+        }
+
+        Collections.sort(references, comparator);
+        if (inverse) {
+            Collections.reverse(references);
+        }
+        System.out.println("Ref: " + references + " / " + matching);
+        return references;
+    }
+
+    @Override
+    public void set(String newValue) {
+        inverse = Boolean.parseBoolean(newValue);
+        invalidateSelectedServices();
+    }
 }

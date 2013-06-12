@@ -26,5 +26,7 @@ public interface FooService {
 	boolean foo();
 	
 	Properties fooProps();
+
+    public int getGrade();
 	
 }

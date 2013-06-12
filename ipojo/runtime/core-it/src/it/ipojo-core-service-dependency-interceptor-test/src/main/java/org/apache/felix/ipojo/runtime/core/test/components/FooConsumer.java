@@ -33,7 +33,7 @@ import java.util.Properties;
 @Provides
 public class FooConsumer implements CheckService {
 
-    @Requires(id= "foo")
+    @Requires(id= "foo", policy = "dynamic-priority")
     private FooService foo;
 
     private Map<String, Object> props;
@@ -47,6 +47,7 @@ public class FooConsumer implements CheckService {
     public Properties getProps() {
         Properties properties =  new Properties();
         properties.put("props", props);
+        properties.put("grade", foo.getGrade());
         return properties;
     }
 
@@ -57,7 +58,6 @@ public class FooConsumer implements CheckService {
 
     @Modified(id = "foo")
     public void modified(FooService foo, Map<String, Object> properties) {
-        System.out.println("modified called");
         props = properties;
     }
 }

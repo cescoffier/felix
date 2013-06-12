@@ -154,7 +154,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                         ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_rankingInterceptorTracker
                                 .getService(reference);
                         if (interceptor != null) {
-                            setRankingInterceptor(interceptor);
+                            m_dependency.onChange(setRankingInterceptor(interceptor));
                         } else {
                             m_dependency.getComponentInstance().getFactory().getLogger().log(Log.ERROR,
                                     "Cannot retrieve the interceptor object from service reference " + reference
@@ -176,13 +176,14 @@ public class ServiceReferenceManager implements TrackerCustomizer {
                             if (anotherReference != null) {
                                 ServiceRankingInterceptor interceptor = (ServiceRankingInterceptor) m_rankingInterceptorTracker
                                         .getService(anotherReference);
-                                if (interceptor != null) setRankingInterceptor(interceptor);
+                                if (interceptor != null) m_dependency.onChange(setRankingInterceptor(interceptor));
                             } else if (m_comparator != null) {
                                 // If we have a comparator, we restore the comparator.
-                                setComparator(m_comparator);
+                                m_dependency.onChange(setComparator(m_comparator));
                             } else {
                                 // If we have neither comparator nor interceptor use an empty interceptor.
-                                setRankingInterceptor(new EmptyBasedServiceRankingInterceptor());
+                                m_dependency.onChange((setRankingInterceptor(new EmptyBasedServiceRankingInterceptor
+                                        ())));
                             }
                         }
                     }
@@ -671,6 +672,7 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     }
 
     public void invalidateMatchingServices() {
+        //TODO Check lock
         try {
             m_dependency.acquireWriteLockIfNotHeld();
             m_matchingReferences.clear();
@@ -682,10 +684,21 @@ public class ServiceReferenceManager implements TrackerCustomizer {
     }
 
     public void invalidateSelectedServices() {
+        //TODO Check lock
         try {
             m_dependency.acquireWriteLockIfNotHeld();
+            ServiceReference oldBest = getFirstService();
+            List<ServiceReference> beforeRanking = getSelectedServices();
             m_selectedReferences.clear();
-            m_rankingInterceptor.getServiceReferences(m_dependency, getMatchingServices());
+            final List<ServiceReference> allServices = getMatchingServices();
+            List<ServiceReference> references = Collections.emptyList();
+            if (!allServices.isEmpty()) {
+                references = m_rankingInterceptor.getServiceReferences(m_dependency, allServices);
+            }
+            RankingResult result = computeDifferences(beforeRanking, references);
+            m_selectedReferences = result.selected;
+            m_dependency.onChange(new ChangeSet(getSelectedServices(), result.departures, result.arrivals, oldBest,
+                    getFirstService(), null, null));
         } finally {
             m_dependency.releaseWriteLockIfHeld();
         }

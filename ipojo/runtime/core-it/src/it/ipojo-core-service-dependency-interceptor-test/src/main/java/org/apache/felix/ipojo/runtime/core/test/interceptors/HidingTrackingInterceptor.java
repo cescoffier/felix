@@ -55,7 +55,6 @@ public class HidingTrackingInterceptor extends DefaultServiceTrackingInterceptor
     @Override
     public void set(String newValue) {
         prop = newValue;
-        System.out.println("updating value to " + newValue);
         invalidateMatchingServices();
     }
 }
